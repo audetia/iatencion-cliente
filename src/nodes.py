@@ -1,18 +1,18 @@
 from colorama import Fore, Style
 from .agents import Agents
-from .tools.GmailTools import GmailToolsClass
+from .tools.EmailTools import EmailToolsClass
 from .state import GraphState, Email
 
 
 class Nodes:
     def __init__(self):
         self.agents = Agents()
-        self.gmail_tools = GmailToolsClass()
+        self.email_tools = EmailToolsClass()
 
     def load_new_emails(self, state: GraphState) -> GraphState:
-        """Loads new emails from Gmail and updates the state."""
+        """Loads new emails and updates the state."""
         print(Fore.YELLOW + "Loading new emails...\n" + Style.RESET_ALL)
-        recent_emails = self.gmail_tools.fetch_unanswered_emails()
+        recent_emails = self.email_tools.fetch_unanswered_emails()
         emails = [Email(**email) for email in recent_emails]
         return {"emails": emails}
 
@@ -138,14 +138,14 @@ class Nodes:
     def create_draft_response(self, state: GraphState) -> GraphState:
         """Creates a draft response in Gmail."""
         print(Fore.YELLOW + "Creating draft email...\n" + Style.RESET_ALL)
-        self.gmail_tools.create_draft_reply(state["current_email"], state["generated_email"])
+        self.email_tools.create_draft_reply(state["current_email"], state["generated_email"])
         
         return {"retrieved_documents": "", "trials": 0}
 
     def send_email_response(self, state: GraphState) -> GraphState:
         """Sends the email response directly using Gmail."""
         print(Fore.YELLOW + "Sending email...\n" + Style.RESET_ALL)
-        self.gmail_tools.send_reply(state["current_email"], state["generated_email"])
+        self.email_tools.send_reply(state["current_email"], state["generated_email"])
         
         return {"retrieved_documents": "", "trials": 0}
     
