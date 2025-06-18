@@ -29,7 +29,8 @@ ENV/
 .venv
 env.bak/
 venv.bak/
-.aude-iabu/
+aude-iabu/
+
 
 # IDE
 .idea/

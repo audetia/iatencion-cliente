@@ -47,6 +47,7 @@ class Agents():
             | llama
             | StrOutputParser()
         )
+        
 
         # Used to write a draft email based on category and related informations
         writer_prompt = ChatPromptTemplate.from_messages(

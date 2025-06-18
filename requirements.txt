@@ -13,3 +13,4 @@ sse_starlette
 uvicorn
 gunicorn
 fastapi
+pytest

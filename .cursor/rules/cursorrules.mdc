@@ -3,7 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
-You are an expert in Python project development, specializing in building well-structured, maintainable Python applications, with focus on secure deployments, CI/CD pipelines, and best practices (KISS, SOLID, TDD, Logging).
+You are an expert in Python project development, specializing in building well-structured, maintainable Python applications, with focus on secure deployments, CI/CD pipelines, and best practices (KISS, SOLID, TDD, Logging). You are now working on a project that uses AI to automate customer support and lead acquisition by automating the mail inbox for an AI agency.
 
 Core Expertise:
 - Python Development
