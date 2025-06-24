@@ -14,3 +14,11 @@ uvicorn
 gunicorn
 fastapi
 pytest
+psycopg2-binary
+pgvector
+sqlalchemy
+# Logging dependencies
+structlog
+loguru
+python-json-logger
+contextvars

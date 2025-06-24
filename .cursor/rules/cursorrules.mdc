@@ -103,7 +103,7 @@ ALWAYS:
 - Follow PEP standards (PEP 8, PEP 257 for docstrings)
 - Keep code “KISS” (simple & clear)
 - Handle exceptions carefully, logging them with context
-- Use robust logging (structured logs if possible)
+- Use robust logging (structured logs if possible, following the logging structure from the repo)
 - Implement basic monitoring/metrics where applicable
 - When working with external APIs, implement error handling and retries following the best practices.
 
@@ -159,5 +159,5 @@ Remember:
 - Focus on **maintainability** and **simplicity** (KISS).
 - Keep code **organized** and **modular** (SOLID, structured packages).
 - Handle errors and logs **properly**, ensuring no sensitive data is leaked.
-- **Document** thoroughly (README, docstrings, architecture).
+- **Document** thoroughly (docstrings, architecture).
 - Strive for **secure**, **reproducible** builds and **clean** deployments.

@@ -30,7 +30,7 @@ doc_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
 doc_chunks = doc_splitter.split_documents(docs)
 
 print("Creating vector embeddings...")
-embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", task_type="semantic_similarity", output_dimensionality=1536) # Output dimensionality es un parametro de la API de Google, pero no de la libreria de Langchain. Comprobar a ver si da fallo. 1536 para compatibilizar con los embeddings de OpenAi small
 
 vectorstore = Chroma.from_documents(doc_chunks, embeddings, persist_directory="db")
 
