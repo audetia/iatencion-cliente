@@ -12,7 +12,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Union
 from pathlib import Path
 
 # Configure advanced logging
@@ -651,4 +651,251 @@ class EmailToolsClass:
 
     def _should_skip_email(self, email_info: Dict) -> bool:
         """Determines if an email should be skipped based on sender."""
-        return self.email_user in email_info["sender"] 
+        return self.email_user in email_info["sender"]
+    
+    # =============================================================================
+    # MÉTODOS PARA TESTING DE CONEXIONES (EmailAccount support)
+    # =============================================================================
+    
+    @staticmethod
+    def test_imap_connection(server: str, port: int, email: str, password: str, 
+                           auth_type: str = 'password', oauth2_token: str = None) -> Dict[str, Union[bool, str, float, dict]]:
+        """
+        Prueba conexión IMAP para una configuración específica.
+        
+        Args:
+            server (str): Servidor IMAP
+            port (int): Puerto IMAP
+            email (str): Email de la cuenta
+            password (str): Contraseña (desencriptada)
+            auth_type (str): Tipo de autenticación
+            oauth2_token (str): Token OAuth2 si aplica
+            
+        Returns:
+            dict: Resultado detallado del test IMAP
+        """
+        import ssl
+        
+        result = {
+            'status': 'unknown',
+            'error': None,
+            'latency': None,
+            'details': {}
+        }
+        
+        start_time = datetime.now()
+        
+        try:
+            context = ssl.create_default_context()
+            
+            # Conexión según el puerto
+            if port == 993:  # SSL
+                mail = imaplib.IMAP4_SSL(server, port, ssl_context=context)
+            else:  # STARTTLS
+                mail = imaplib.IMAP4(server, port)
+                mail.starttls(ssl_context=context)
+            
+            # Autenticación
+            if auth_type == 'oauth2':
+                if not oauth2_token:
+                    result.update({
+                        'status': 'error',
+                        'error': 'OAuth2 token requerido',
+                        'latency': (datetime.now() - start_time).total_seconds()
+                    })
+                    return result
+                # TODO: Implementar OAuth2 login cuando sea necesario
+                result.update({
+                    'status': 'error',
+                    'error': 'OAuth2 no implementado aún',
+                    'latency': (datetime.now() - start_time).total_seconds()
+                })
+                return result
+            else:
+                mail.login(email, password)
+            
+            # Test básico de operaciones
+            mail.select('INBOX')
+            status, messages = mail.search(None, 'ALL')
+            
+            latency = (datetime.now() - start_time).total_seconds()
+            
+            result.update({
+                'status': 'success',
+                'latency': round(latency, 3),
+                'details': {
+                    'total_messages': len(messages[0].split()) if messages[0] else 0,
+                    'server_capabilities': list(mail.capabilities) if hasattr(mail, 'capabilities') else []
+                }
+            })
+            
+            mail.logout()
+            
+        except Exception as e:
+            latency = (datetime.now() - start_time).total_seconds()
+            result.update({
+                'status': 'error',
+                'error': str(e),
+                'latency': round(latency, 3)
+            })
+        
+        return result
+    
+    @staticmethod
+    def test_smtp_connection(server: str, port: int, email: str, password: str,
+                           auth_type: str = 'password', oauth2_token: str = None) -> Dict[str, Union[bool, str, float, dict]]:
+        """
+        Prueba conexión SMTP para una configuración específica.
+        
+        Args:
+            server (str): Servidor SMTP
+            port (int): Puerto SMTP
+            email (str): Email de la cuenta
+            password (str): Contraseña (desencriptada)
+            auth_type (str): Tipo de autenticación
+            oauth2_token (str): Token OAuth2 si aplica
+            
+        Returns:
+            dict: Resultado detallado del test SMTP
+        """
+        import ssl
+        
+        result = {
+            'status': 'unknown',
+            'error': None,
+            'latency': None,
+            'details': {}
+        }
+        
+        start_time = datetime.now()
+        
+        try:
+            context = ssl.create_default_context()
+            
+            # Conexión según el puerto
+            if port == 465:  # SSL
+                server_conn = smtplib.SMTP_SSL(server, port, context=context)
+            else:  # STARTTLS
+                server_conn = smtplib.SMTP(server, port)
+                server_conn.starttls(context=context)
+            
+            # Autenticación
+            if auth_type == 'oauth2':
+                if not oauth2_token:
+                    result.update({
+                        'status': 'error',
+                        'error': 'OAuth2 token requerido',
+                        'latency': (datetime.now() - start_time).total_seconds()
+                    })
+                    return result
+                # TODO: Implementar OAuth2 login cuando sea necesario
+                result.update({
+                    'status': 'error',
+                    'error': 'OAuth2 no implementado aún',
+                    'latency': (datetime.now() - start_time).total_seconds()
+                })
+                return result
+            else:
+                server_conn.login(email, password)
+            
+            latency = (datetime.now() - start_time).total_seconds()
+            
+            result.update({
+                'status': 'success',
+                'latency': round(latency, 3),
+                'details': {
+                    'server_features': list(server_conn.esmtp_features.keys()) if hasattr(server_conn, 'esmtp_features') else []
+                }
+            })
+            
+            server_conn.quit()
+            
+        except Exception as e:
+            latency = (datetime.now() - start_time).total_seconds()
+            result.update({
+                'status': 'error',
+                'error': str(e),
+                'latency': round(latency, 3)
+            })
+        
+        return result
+    
+    @staticmethod
+    def test_email_account_connection(account_config: dict, decrypted_password: str) -> Dict[str, Union[bool, str, float, dict]]:
+        """
+        Prueba conexión completa (IMAP + SMTP) para una cuenta de email.
+        Método principal que debe ser usado por EmailAccount.
+        
+        Args:
+            account_config (dict): Configuración de la cuenta
+            decrypted_password (str): Contraseña desencriptada
+            
+        Returns:
+            dict: Resultado completo del test de conexión
+        """
+        result = {
+            'overall_status': 'unknown',
+            'imap': {'status': 'unknown', 'error': None, 'latency': None, 'details': {}},
+            'smtp': {'status': 'unknown', 'error': None, 'latency': None, 'details': {}},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Test IMAP
+        logger.debug(f"Testing IMAP connection for {account_config.get('email', 'unknown')}")
+        imap_result = EmailToolsClass.test_imap_connection(
+            server=account_config['imap_server'],
+            port=account_config['imap_port'],
+            email=account_config['email'],
+            password=decrypted_password,
+            auth_type=account_config.get('auth_type', 'password'),
+            oauth2_token=account_config.get('oauth2_token')
+        )
+        result['imap'] = imap_result
+        
+        # Test SMTP
+        logger.debug(f"Testing SMTP connection for {account_config.get('email', 'unknown')}")
+        smtp_result = EmailToolsClass.test_smtp_connection(
+            server=account_config['smtp_server'],
+            port=account_config['smtp_port'],
+            email=account_config['email'],
+            password=decrypted_password,
+            auth_type=account_config.get('auth_type', 'password'),
+            oauth2_token=account_config.get('oauth2_token')
+        )
+        result['smtp'] = smtp_result
+        
+        # Determinar estado general
+        if result['imap']['status'] == 'success' and result['smtp']['status'] == 'success':
+            result['overall_status'] = 'success'
+        elif result['imap']['status'] == 'error' and result['smtp']['status'] == 'error':
+            result['overall_status'] = 'error'
+        else:
+            result['overall_status'] = 'partial'
+        
+        logger.info(f"Connection test completed for {account_config.get('email', 'unknown')}: {result['overall_status']}")
+        return result
+    
+    @staticmethod
+    def create_email_tools_for_account(account_config: dict, decrypted_password: str) -> 'EmailToolsClass':
+        """
+        Crea una instancia de EmailToolsClass configurada para una cuenta específica.
+        
+        Args:
+            account_config (dict): Configuración de la cuenta
+            decrypted_password (str): Contraseña desencriptada
+            
+        Returns:
+            EmailToolsClass: Instancia configurada
+        """
+        # Crear instancia con configuración personalizada
+        tools = EmailToolsClass.__new__(EmailToolsClass)
+        
+        # Configurar manualmente sin validar config global
+        tools.email_user = account_config['email']
+        tools.email_pass = decrypted_password
+        tools.imap_server = account_config['imap_server']
+        tools.smtp_server = account_config['smtp_server']
+        tools.smtp_port = account_config['smtp_port']
+        
+        logger.debug(f"Created EmailTools instance for account: {account_config['email']}")
+        return tools 

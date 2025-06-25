@@ -34,9 +34,9 @@
 
 - [X] Instalar dependencias: `sqlalchemy`, `psycopg2-binary`, `pgvector`, `python-dotenv`
 - [X] Crear archivo `src/models/base.py` con la configuración base de SQLAlchemy
-- [ ] Implementar modelo `User` en `src/models/user.py`
-- [ ] Implementar modelo `EmailAccount` en `src/models/email_account.py`
-- [ ] Implementar modelos `Question`, `QuestionVariant`, y `Answer` en `src/models/qa.py`
+- [X] Implementar modelo `User` en `src/models/user.py`
+- [X] Implementar modelo `EmailAccount` en `src/models/email_account.py`
+- [X] Implementar modelos `Question`, `QuestionVariant`, y `Answer` en `src/models/qa.py`
 - [ ] Implementar modelos de automatización en `src/models/automation.py`:
 
   - `Automation` (tabla base)
@@ -59,7 +59,7 @@
 
 **Subtareas:**
 
-- [ ] Crear `src/database.py` con la clase principal `DatabaseManager` y configuración de conexión
+- [X] Crear `src/database.py` con la clase principal `DatabaseManager` y configuración de conexión
 - [ ] Implementar método de encriptación/desencriptación para contraseñas IMAP usando `cryptography`
 - [ ] Implementar métodos de usuario:
   - `create_user(email, name)`: Crear usuario nuevo

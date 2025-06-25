@@ -6,7 +6,7 @@ from src.graph import Workflow
 from dotenv import load_dotenv
 
 # Importar sistema de logging
-from logging import setup_logging, LoggingMiddleware, MetricsMiddleware, get_logger
+from custom_logging import setup_logging, LoggingMiddleware, MetricsMiddleware, get_logger
 
 # Load .env file
 load_dotenv()
@@ -49,7 +49,7 @@ add_routes(app, runnable)
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring"""
-    from logging.utils import MonitoringUtils
+    from custom_logging.utils import MonitoringUtils
     import os
     
     log_file = os.getenv('LOG_FILE', 'logs/app.log')

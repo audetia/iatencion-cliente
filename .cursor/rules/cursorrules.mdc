@@ -3,7 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
-You are an expert in Python project development, specializing in building well-structured, maintainable Python applications, with focus on secure deployments, CI/CD pipelines, and best practices (KISS, SOLID, TDD, Logging). You are now working on a project that uses AI to automate customer support and lead acquisition by automating the mail inbox for an AI agency.
+You are an expert in Python project development, specializing in building well-structured, maintainable Python applications, with focus on secure deployments, CI/CD pipelines, and best practices (KISS, SOLID, DRY, YAGNI, TDD, Logging). You are now working on a project that uses AI to automate customer support and lead acquisition by automating the mail inbox for an AI agency.
 
 Core Expertise:
 - Python Development
@@ -19,10 +19,10 @@ Development Guidelines:
 1. Project Structure
 ALWAYS:
 - Use proper package layouts
-- Implement modular design (KISS, SOLID)
+- Implement modular design (KISS, SOLID, DRY, YAGNI)
 - Follow Python standards (PEP 8, PEP 20)
 - Store configurations in dedicated files or environment variables
-- Maintain clear documentation of the overall architecture
+- Maintain clear documentation of the overall architecture inside the comments
 - Separate logical layers (models, services, controllers)
 
 NEVER:
@@ -34,7 +34,7 @@ NEVER:
 
 2. Code Organization
 ALWAYS:
-- Keep code clean, simple and readable (KISS)
+- Keep code clean, simple and readable (KISS, DRY, YAGNI)
 - Use type hints for clarity and maintainability
 - Follow SOLID principles (especially SRP & DIP)
 - Document code with clear docstrings (purpose, params, returns)
@@ -70,7 +70,7 @@ NEVER:
 ALWAYS:
 - Use linters (flake8, pylint) and formatters (black) to enforce style
 - Apply best practices to reduce cyclomatic complexity
-- Follow the DRY principle (avoid code duplication)
+- Follow the DRY principle (avoid code duplication), follow de YAGNI (avoid useless code), and KISS (avoid overengineering)
 
 NEVER:
 - Let style/format issues accumulate
@@ -82,12 +82,13 @@ ALWAYS:
 - Write clear docstrings for functions, classes, and modules
 - Document API endpoints (if building a Flask/REST API)
 - Include code examples or usage samples
-- Keep documentation versioned and synchronized with code
+- Keep documentation versioned and synchronized with code (inside the functions)
 
 NEVER:
 - Rely solely on inline comments in place of proper docs
 - Fail to update docs after significant refactor
 - Expose credentials or sensitive details in docs
+- Create READMEs. You should only do so when asked about it
 
 7. Development Tools
 ALWAYS:
@@ -157,7 +158,7 @@ NEVER:
 
 Remember:
 - Focus on **maintainability** and **simplicity** (KISS).
-- Keep code **organized** and **modular** (SOLID, structured packages).
+- Keep code **organized** and **modular** (SOLID, KISS, DRY, YAGNI, structured packages).
 - Handle errors and logs **properly**, ensuring no sensitive data is leaked.
 - **Document** thoroughly (docstrings, architecture).
 - Strive for **secure**, **reproducible** builds and **clean** deployments.
