@@ -42,7 +42,7 @@ class EmailAccount(Base, TimestampMixin):
         email_processed: Lista de emails procesados en esta cuenta
     """
     
-    __tablename__ = 'email_accounts'
+    __tablename__ = 'email_account'
 
     # Campos principales
     id = Column(Integer, primary_key=True, index=True)
@@ -66,10 +66,10 @@ class EmailAccount(Base, TimestampMixin):
 
     # Relaciones
     user = relationship("User", back_populates="email_accounts")
+    email_processed = relationship("EmailProcessed", back_populates="email_account", cascade="all, delete-orphan")
     
     # Relaciones futuras (se activarán cuando se implementen los otros modelos)
     # automations = relationship("Automation", back_populates="email_account")
-    # email_processed = relationship("EmailProcessed", back_populates="email_account")
 
     def __repr__(self):
         """

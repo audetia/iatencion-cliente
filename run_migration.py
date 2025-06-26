@@ -142,10 +142,10 @@ def run_migration():
             
             # Check for specific tables
             expected_tables = [
-                'users', 'email_accounts', 'questions', 'question_variants', 
-                'answers', 'automations', 'response_automations', 
-                'forward_automations', 'automation_questions', 'email_processed', 
-                'user_usage_monthly', 'tiers', 'subscriptions'
+                'users', 'email_account', 'question', 'question_variant', 
+                'answer', 'automation', 'response_automation', 
+                'forward_automation', 'email_processed', 
+                'user_usage_monthly', 'tier', 'subscription'
             ]
             
             for table in expected_tables:

@@ -38,7 +38,7 @@ class Question(Base, TimestampMixin):
         answer: Respuesta asociada a la pregunta
         automation_questions: Relación con automatizaciones que usan esta pregunta
     """
-    __tablename__ = 'questions'
+    __tablename__ = 'question'
     
     # Campos principales
     id = Column(Integer, primary_key=True, index=True)
@@ -49,7 +49,7 @@ class Question(Base, TimestampMixin):
     user = relationship("User", back_populates="questions")
     variants = relationship("QuestionVariant", back_populates="question", cascade="all, delete-orphan")
     answer = relationship("Answer", back_populates="question", uselist=False, cascade="all, delete-orphan")
-    # automation_questions = relationship("AutomationQuestion", back_populates="question")  # Futuro
+    response_automation = relationship("ResponseAutomation", back_populates="question", uselist=False)
     
     def __repr__(self):
         """
@@ -346,11 +346,11 @@ class QuestionVariant(Base):
     Relationships:
         question: Pregunta original a la que pertenece esta variante
     """
-    __tablename__ = 'question_variants'
+    __tablename__ = 'question_variant'
     
     # Campos principales
     id = Column(Integer, primary_key=True, index=True)
-    question_id = Column(Integer, ForeignKey('questions.id'), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey('question.id'), nullable=False, index=True)
     variant_text = Column(Text, nullable=False)
     # El embedding se maneja como un campo especial en SQLAlchemy con pgvector
     embedding = Column('embedding', None, nullable=False)
@@ -699,11 +699,11 @@ class Answer(Base, TimestampMixin):
     Relationships:
         question: Pregunta a la que responde esta respuesta
     """
-    __tablename__ = 'answers'
+    __tablename__ = 'answer'
     
     # Campos principales
     id = Column(Integer, primary_key=True, index=True)
-    question_id = Column(Integer, ForeignKey('questions.id'), nullable=False, unique=True, index=True)
+    question_id = Column(Integer, ForeignKey('question.id'), nullable=False, unique=True, index=True)
     answer_text = Column(Text, nullable=False)
     response_instructions = Column(String(255))
     

@@ -17,6 +17,7 @@ pytest
 psycopg2-binary
 pgvector
 sqlalchemy
+cryptography
 # Logging dependencies
 structlog
 loguru

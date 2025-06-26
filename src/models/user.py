@@ -34,6 +34,8 @@ class User(Base, TimestampMixin):
         subscriptions: Lista de suscripciones del usuario
         email_processed: Lista de emails procesados para el usuario
         user_usage_monthly: Estadísticas de uso mensual del usuario
+
+
     """
     
     __tablename__ = 'users'
@@ -47,11 +49,10 @@ class User(Base, TimestampMixin):
     # Relaciones
     email_accounts = relationship("EmailAccount", back_populates="user", cascade="all, delete-orphan")
     questions = relationship("Question", back_populates="user")
+    user_usage_monthly = relationship("UserUsageMonthly", back_populates="user", cascade="all, delete-orphan")
     # Relaciones futuras (se activarán cuando se implementen los otros modelos)
     # automations = relationship("Automation", back_populates="user")
     # subscriptions = relationship("Subscription", back_populates="user")
-    # email_processed = relationship("EmailProcessed", back_populates="user")
-    # user_usage_monthly = relationship("UserUsageMonthly", back_populates="user")
     
     def __repr__(self):
         """
@@ -150,7 +151,7 @@ class User(Base, TimestampMixin):
             
             # Calcular uso actual (placeholder - implementar con modelos reales)
             current_usage = {
-                'emails_processed': 0,  # TODO: Contar desde email_processed
+                'emails_processed': len(self.email_processed) if self.email_processed else 0,
                 'qa_pairs': len(self.questions) if self.questions else 0,
                 'email_accounts': len(self.email_accounts) if self.email_accounts else 0
             }
@@ -284,9 +285,8 @@ class User(Base, TimestampMixin):
             has_qa_pairs = len(self.questions) > 0 if self.questions else False
             has_qa_with_answers = any(q.has_answer for q in (self.questions or []))
             
-            # TODO: Verificar automatizaciones cuando se implementen
-            has_automations = False
-            has_active_automations = False
+            has_automations = len(self.automations) > 0 if self.automations else False
+            has_active_automations = len(self.get_active_automations(db_session)) > 0
             
             # Calcular progreso de configuración
             setup_steps = [

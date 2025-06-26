@@ -37,16 +37,16 @@
 - [X] Implementar modelo `User` en `src/models/user.py`
 - [X] Implementar modelo `EmailAccount` en `src/models/email_account.py`
 - [X] Implementar modelos `Question`, `QuestionVariant`, y `Answer` en `src/models/qa.py`
-- [ ] Implementar modelos de automatización en `src/models/automation.py`:
+- [X] Implementar modelos de automatización en `src/models/automation.py`:
 
   - `Automation` (tabla base)
   - `ResponseAutomation`
   - `ForwardAutomation`
   - `AutomationQuestion` (tabla intermedia)
-- [ ] Implementar modelos de estadísticas en `src/models/statistics.py`
-- [ ] Crear archivo `src/models/__init__.py` que exporte todos los modelos
-- [ ] Verificar que todos los modelos incluyan timestamps y relaciones correctas
-- [ ] Implementar métodos de actualización automática de timestamps en modelos base:
+- [X] Implementar modelos de estadísticas en `src/models/statistics.py`
+- [X] Crear archivo `src/models/__init__.py` que exporte todos los modelos
+- [X] Verificar que todos los modelos incluyan timestamps y relaciones correctas
+- [X] Implementar métodos de actualización automática de timestamps en modelos base:
 
   - Crear mixin `TimestampMixin` con métodos `before_update()`
   - Aplicar el mixin a User, EmailAccount, Answer, Automation
@@ -60,21 +60,21 @@
 **Subtareas:**
 
 - [X] Crear `src/database.py` con la clase principal `DatabaseManager` y configuración de conexión
-- [ ] Implementar método de encriptación/desencriptación para contraseñas IMAP usando `cryptography`
-- [ ] Implementar métodos de usuario:
+- [X] Implementar método de encriptación/desencriptación para contraseñas IMAP usando `cryptography`
+- [X] Implementar métodos de usuario:
   - `create_user(email, name)`: Crear usuario nuevo
   - `get_user_by_email(email)`: Buscar usuario por email
   - `get_user_by_id(user_id)`: Buscar usuario por ID
   - `update_user(user_id, **kwargs)`: Actualizar datos de usuario
   - `verify_user(user_id)`: Marcar usuario como verificado
-- [ ] Implementar métodos de cuentas de email:
+- [X] Implementar métodos de cuentas de email:
   - `add_email_account(user_id, email, imap_config, smtp_config)`: Añadir cuenta
   - `get_user_email_accounts(user_id)`: Listar cuentas de un usuario
   - `update_email_account(account_id, **kwargs)`: Actualizar configuración
   - `delete_email_account(account_id)`: Eliminar cuenta
   - `get_email_account_credentials(account_id)`: Obtener credenciales desencriptadas
 - [ ] Crear tests unitarios básicos para verificar funcionalidad
-- [ ] Documentar todos los métodos con docstrings detallados
+- [X] Documentar todos los métodos con docstrings detallados
 
 ### Día 4: Capa de Acceso a Datos - Parte 2 (Q&A y Embeddings)
 

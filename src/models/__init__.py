@@ -12,6 +12,8 @@ from .base import Base, TimestampMixin, create_tables, drop_tables
 from .user import User
 from .email_account import EmailAccount
 from .qa import Question, QuestionVariant, Answer
+from .automation import Automation, ResponseAutomation, ForwardAutomation, AutomationType
+from .statistics import EmailProcessed, UserUsageMonthly, EmailActionType
 
 # Exportar todos los modelos y utilidades
 __all__ = [
@@ -26,7 +28,14 @@ __all__ = [
     'EmailAccount',
     'Question',
     'QuestionVariant',
-    'Answer'
+    'Answer',
+    'Automation',
+    'ResponseAutomation',
+    'ForwardAutomation',
+    'AutomationType',
+    'EmailProcessed',
+    'UserUsageMonthly',
+    'EmailActionType'
 ]
 
 # Función de conveniencia para verificar que todos los modelos están importados
@@ -37,7 +46,9 @@ def get_all_models():
     Returns:
         list: Lista de clases de modelo
     """
-    return [User, EmailAccount, Question, QuestionVariant, Answer]
+    return [User, EmailAccount, Question, QuestionVariant, Answer, 
+            Automation, ResponseAutomation, ForwardAutomation,
+            EmailProcessed, UserUsageMonthly]
 
 # Función para verificar integridad de relaciones
 def verify_model_relationships():
@@ -75,9 +86,29 @@ def verify_model_relationships():
     if not hasattr(Answer, 'question'):
         issues.append("Answer.question relationship missing")
     
+    # Verificar relaciones Automation
+    if not hasattr(Automation, 'user'):
+        issues.append("Automation.user relationship missing")
+    if not hasattr(Automation, 'email_account'):
+        issues.append("Automation.email_account relationship missing")
+    if not hasattr(Automation, 'response_automation'):
+        issues.append("Automation.response_automation relationship missing")
+    if not hasattr(Automation, 'forward_automation'):
+        issues.append("Automation.forward_automation relationship missing")
+    
+    # Verificar relaciones ResponseAutomation
+    if not hasattr(ResponseAutomation, 'automation'):
+        issues.append("ResponseAutomation.automation relationship missing")
+    if not hasattr(ResponseAutomation, 'question'):
+        issues.append("ResponseAutomation.question relationship missing")
+    
+    # Verificar relaciones ForwardAutomation
+    if not hasattr(ForwardAutomation, 'automation'):
+        issues.append("ForwardAutomation.automation relationship missing")
+    
     return {
         'is_valid': len(issues) == 0,
         'issues': issues,
         'total_models': len(get_all_models()),
-        'relationships_checked': 8
+        'relationships_checked': 15
     } 
