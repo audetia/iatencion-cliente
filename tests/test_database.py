@@ -18,7 +18,7 @@ class TestDatabaseManager:
     def db_manager(self):
         """Fixture que crea una instancia de DatabaseManager para tests."""
         with patch.dict(os.environ, {
-            'ENCRYPTION_KEY': 'dGVzdF9lbmNyeXB0aW9uX2tleV9mb3JfdGVzdGluZw=='  # test key en base64
+            'ENCRYPTION_KEY': 'Rvm4w0_2nVFmJbxPnj9YTdX8OlaT3SIZH8jY8JRINV4='  # Clave Fernet válida
         }):
             return DatabaseManager()
     
@@ -79,7 +79,7 @@ class TestDatabaseManager:
             'is_verified': False
         }
         
-        with patch('src.database.User') as mock_user_class:
+        with patch('src.models.user.User') as mock_user_class:
             mock_user_class.create.return_value = mock_user
             
             result = db_manager.create_user("test@example.com", "Test User")
@@ -111,7 +111,7 @@ class TestDatabaseManager:
         mock_user.email = 'test@example.com'
         mock_user.to_dict.return_value = {'id': 1, 'email': 'test@example.com'}
         
-        with patch('src.database.User') as mock_user_class:
+        with patch('src.models.user.User') as mock_user_class:
             mock_user_class.get_by_email.return_value = mock_user
             
             result = db_manager.get_user_by_email("test@example.com")
@@ -126,7 +126,7 @@ class TestDatabaseManager:
         mock_session = Mock()
         mock_get_session.return_value.__enter__.return_value = mock_session
         
-        with patch('src.database.User') as mock_user_class:
+        with patch('src.models.user.User') as mock_user_class:
             mock_user_class.get_by_email.return_value = None
             
             result = db_manager.get_user_by_email("noexiste@example.com")
@@ -143,7 +143,7 @@ class TestDatabaseManager:
         mock_user.is_verified = False
         mock_user.to_dict.return_value = {'id': 1, 'is_verified': True}
         
-        with patch('src.database.User') as mock_user_class:
+        with patch('src.models.user.User') as mock_user_class:
             mock_user_class.get_by_id.return_value = mock_user
             
             result = db_manager.verify_user(1)
@@ -176,8 +176,8 @@ class TestDatabaseManager:
             'user_id': 1
         }
         
-        with patch('src.database.User') as mock_user_class, \
-             patch('src.database.EmailAccount') as mock_account_class:
+        with patch('src.models.user.User') as mock_user_class, \
+             patch('src.models.email_account.EmailAccount') as mock_account_class:
             
             mock_user_class.get_by_id.return_value = mock_user
             mock_account_class.create.return_value = mock_account
@@ -241,8 +241,8 @@ class TestDatabaseManager:
         mock_account2 = Mock()
         mock_account2.to_dict.return_value = {'id': 2, 'email': 'test2@gmail.com'}
         
-        with patch('src.database.User') as mock_user_class, \
-             patch('src.database.EmailAccount') as mock_account_class:
+        with patch('src.models.user.User') as mock_user_class, \
+             patch('src.models.email_account.EmailAccount') as mock_account_class:
             
             mock_user_class.get_by_id.return_value = mock_user
             mock_account_class.get_by_user.return_value = [mock_account1, mock_account2]
@@ -276,7 +276,7 @@ class TestDatabaseManager:
         mock_account.is_active = True
         mock_account.health_status = "healthy"
         
-        with patch('src.database.EmailAccount') as mock_account_class:
+        with patch('src.models.email_account.EmailAccount') as mock_account_class:
             mock_account_class.get_by_id.return_value = mock_account
             
             result = db_manager.get_email_account_credentials(account_id=1)
@@ -297,7 +297,7 @@ class TestDatabaseManager:
         mock_account.email = "test@gmail.com"
         mock_account.user_id = 1
         
-        with patch('src.database.EmailAccount') as mock_account_class:
+        with patch('src.models.email_account.EmailAccount') as mock_account_class:
             mock_account_class.get_by_id.return_value = mock_account
             
             result = db_manager.delete_email_account(account_id=1)
@@ -349,7 +349,7 @@ class TestDatabaseManagerIntegration:
     def db_manager(self):
         """Fixture para tests de integración."""
         with patch.dict(os.environ, {
-            'ENCRYPTION_KEY': 'dGVzdF9lbmNyeXB0aW9uX2tleV9mb3JfdGVzdGluZw=='
+            'ENCRYPTION_KEY': 'Rvm4w0_2nVFmJbxPnj9YTdX8OlaT3SIZH8jY8JRINV4='  # Clave Fernet válida
         }):
             return DatabaseManager()
     

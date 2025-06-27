@@ -65,10 +65,20 @@ class Automation(Base, TimestampMixin):
     is_draft_mode = Column(Boolean, default=False, nullable=False)
     
     # Relaciones
-    user = relationship("User")  # No back_populates por ahora
     email_account = relationship("EmailAccount")  # No back_populates por ahora
     response_automation = relationship("ResponseAutomation", back_populates="automation", uselist=False, cascade="all, delete-orphan")
     forward_automation = relationship("ForwardAutomation", back_populates="automation", uselist=False, cascade="all, delete-orphan")
+    
+    # Propiedad para acceder al usuario a través de email_account
+    @property
+    def user(self):
+        """
+        Obtiene el usuario a través de email_account.
+        
+        Returns:
+            User | None: Usuario propietario de la automatización
+        """
+        return self.email_account.user if self.email_account else None
     
     def __repr__(self):
         """

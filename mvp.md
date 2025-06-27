@@ -8,9 +8,9 @@
 
 **Subtareas:**
 
-- [X] Crear BBDD Postgres
-- [X] Instalar y configurar la extensión pgvector siguiendo la documentación oficial
-- [X] Crear el diseño del esquema de base de datos en un archivo `docs/database_schema.md` con las siguientes tablas:
+- [x] Crear BBDD Postgres
+- [x] Instalar y configurar la extensión pgvector siguiendo la documentación oficial
+- [x] Crear el diseño del esquema de base de datos en un archivo `docs/database_schema.md` con las siguientes tablas:
   - `users`: id, email, name, created_at, updated_at, is_verified
   - `email_accounts`: id, user_id, email, imap_server, imap_port, smtp_server, smtp_port, encrypted_password, is_active, created_at, updated_at
   - `questions`: id, user_id, original_question, created_at
@@ -22,9 +22,9 @@
   - `automation_questions`: automation_id, question_id (tabla intermedia)
   - `email_statistics`: id, email_account_id, date, emails_processed, emails_responded, emails_forwarded, emails_spam, tokens_used
   - `email_categories`: id, email_account_id, category, count, date
-- [X] Crear el script SQL de inicialización en `migrations/001_initial_schema.sql`
-- [X] Documentar índices necesarios para optimización (especialmente para búsquedas vectoriales)
-- [X] Crear archivo `.env.template` con las variables de entorno necesarias para la conexión a la base de datos
+- [x] Crear el script SQL de inicialización en `migrations/001_initial_schema.sql`
+- [x] Documentar índices necesarios para optimización (especialmente para búsquedas vectoriales)
+- [x] Crear archivo `.env.template` con las variables de entorno necesarias para la conexión a la base de datos
 
 ### Día 2: Implementación de Modelos SQLAlchemy
 
@@ -32,21 +32,22 @@
 
 **Subtareas:**
 
-- [X] Instalar dependencias: `sqlalchemy`, `psycopg2-binary`, `pgvector`, `python-dotenv`
-- [X] Crear archivo `src/models/base.py` con la configuración base de SQLAlchemy
-- [X] Implementar modelo `User` en `src/models/user.py`
-- [X] Implementar modelo `EmailAccount` en `src/models/email_account.py`
-- [X] Implementar modelos `Question`, `QuestionVariant`, y `Answer` en `src/models/qa.py`
-- [X] Implementar modelos de automatización en `src/models/automation.py`:
+- [x] Instalar dependencias: `sqlalchemy`, `psycopg2-binary`, `pgvector`, `python-dotenv`
+- [x] Crear archivo `src/models/base.py` con la configuración base de SQLAlchemy
+- [x] Implementar modelo `User` en `src/models/user.py`
+- [x] Implementar modelo `EmailAccount` en `src/models/email_account.py`
+- [x] Implementar modelos `Question`, `QuestionVariant`, y `Answer` en `src/models/qa.py`
+- [x] Implementar modelos de automatización en `src/models/automation.py`:
 
   - `Automation` (tabla base)
   - `ResponseAutomation`
   - `ForwardAutomation`
   - `AutomationQuestion` (tabla intermedia)
-- [X] Implementar modelos de estadísticas en `src/models/statistics.py`
-- [X] Crear archivo `src/models/__init__.py` que exporte todos los modelos
-- [X] Verificar que todos los modelos incluyan timestamps y relaciones correctas
-- [X] Implementar métodos de actualización automática de timestamps en modelos base:
+
+- [x] Implementar modelos de estadísticas en `src/models/statistics.py`
+- [x] Crear archivo `src/models/__init__.py` que exporte todos los modelos
+- [x] Verificar que todos los modelos incluyan timestamps y relaciones correctas
+- [x] Implementar métodos de actualización automática de timestamps en modelos base:
 
   - Crear mixin `TimestampMixin` con métodos `before_update()`
   - Aplicar el mixin a User, EmailAccount, Answer, Automation
@@ -59,22 +60,22 @@
 
 **Subtareas:**
 
-- [X] Crear `src/database.py` con la clase principal `DatabaseManager` y configuración de conexión
-- [X] Implementar método de encriptación/desencriptación para contraseñas IMAP usando `cryptography`
-- [X] Implementar métodos de usuario:
+- [x] Crear `src/database.py` con la clase principal `DatabaseManager` y configuración de conexión
+- [x] Implementar método de encriptación/desencriptación para contraseñas IMAP usando `cryptography`
+- [x] Implementar métodos de usuario:
   - `create_user(email, name)`: Crear usuario nuevo
   - `get_user_by_email(email)`: Buscar usuario por email
   - `get_user_by_id(user_id)`: Buscar usuario por ID
   - `update_user(user_id, **kwargs)`: Actualizar datos de usuario
   - `verify_user(user_id)`: Marcar usuario como verificado
-- [X] Implementar métodos de cuentas de email:
+- [x] Implementar métodos de cuentas de email:
   - `add_email_account(user_id, email, imap_config, smtp_config)`: Añadir cuenta
   - `get_user_email_accounts(user_id)`: Listar cuentas de un usuario
   - `update_email_account(account_id, **kwargs)`: Actualizar configuración
   - `delete_email_account(account_id)`: Eliminar cuenta
   - `get_email_account_credentials(account_id)`: Obtener credenciales desencriptadas
-- [ ] Crear tests unitarios básicos para verificar funcionalidad
-- [X] Documentar todos los métodos con docstrings detallados
+- [x] Crear tests unitarios básicos para verificar funcionalidad
+- [x] Documentar todos los métodos con docstrings detallados
 
 ### Día 4: Capa de Acceso a Datos - Parte 2 (Q&A y Embeddings)
 
@@ -82,22 +83,20 @@
 
 **Subtareas:**
 
-- [ ] Instalar `langchain_google_genai` para generación de embeddings
-- [ ] Implementar métodos de Q&A en `DatabaseManager`:
+- [x] Instalar `langchain_google_genai` para generación de embeddings
+- [x] Implementar métodos de Q&A en `DatabaseManager`:
   - `create_question(user_id, original_question)`: Crear pregunta original
   - `add_question_variant(question_id, variant_text, embedding)`: Añadir variante con embedding
   - `create_answer(question_id, response_text, response_instructions)`: Crear respuesta
   - `update_answer(answer_id, **kwargs)`: Actualizar respuesta
   - `get_question_with_variants(question_id)`: Obtener pregunta con todas sus variantes
   - `search_similar_questions(user_id, query_embedding, threshold=0.8, limit=5)`: Búsqueda vectorial
-- [ ] Implementar método helper `generate_embedding(text)` que use el modelo de embeddings de Google
-- [ ] Crear índice vectorial en PostgreSQL para optimizar búsquedas:
-  ```sql
-  CREATE INDEX ON question_variants USING ivfflat (embedding vector_cosine_ops);
-  ```
-- [ ] Implementar caché de embeddings para evitar regenerar embeddings idénticos
-- [ ] Crear función de utilidad para calcular similitud coseno entre embeddings
-- [ ] Documentar el flujo de búsqueda semántica
+- [x] Implementar método helper `generate_embedding(text)` que use el modelo de embeddings de Google
+- [x] Implementar método adicional `create_question_with_variants()` para UX del frontend
+- [x] Implementar caché de embeddings para evitar regenerar embeddings idénticos
+- [x] Crear función de utilidad para calcular similitud coseno entre embeddings
+- [x] Documentar el flujo de búsqueda semántica
+- [x] **Índice vectorial HNSW ya implementado** (superior a IVFFlat para nuestro caso de uso)
 
 ### Día 5: Capa de Acceso a Datos - Parte 3 (Automatizaciones y Estadísticas)
 
@@ -113,6 +112,7 @@
   - `toggle_automation(automation_id)`: Activar/desactivar automatización
   - `update_automation_questions(automation_id, question_ids)`: Actualizar preguntas asociadas
   - `get_automation_details(automation_id)`: Obtener detalles completos
+
 - [ ] Implementar métodos de estadísticas:
 
   - `log_email_processed(email_account_id, category, action_taken)`: Registrar procesamiento
@@ -120,6 +120,7 @@
   - `get_daily_statistics(email_account_id, date_range)`: Obtener estadísticas diarias
   - `get_category_distribution(email_account_id, date_range)`: Distribución por categorías
   - `calculate_time_saved(email_account_id)`: Calcular tiempo ahorrado (5 min/email)
+
 - [ ] Implementar agregaciones eficientes usando queries SQL optimizadas
 - [ ] Crear método de limpieza para estadísticas antiguas (>90 días)
 - [ ] Añadir logging detallado para debugging
@@ -190,6 +191,7 @@
   - Email con pregunta que tiene respuesta en Q&A
   - Email que debe usar el RAG original
   - Email spam que debe ser ignorado
+
 - [ ] Implementar fixtures de prueba con datos de ejemplo en la base de datos
 - [ ] Verificar que las estadísticas se actualizan correctamente
 - [ ] Probar edge cases:
@@ -197,6 +199,7 @@
   - Usuario sin automatizaciones configuradas
   - Q&A con embeddings corruptos
   - Múltiples automatizaciones que podrían aplicar
+
 - [ ] Documentar el nuevo flujo en `docs/modified_workflow.md`
 - [ ] Crear diagrama actualizado del flujo usando Mermaid
 - [ ] Verificar compatibilidad con el sistema existente
@@ -376,27 +379,32 @@
   - Implementar UPSERT atómico para `user_usage_monthly`
   - Manejo de concurrencia con locks optimistas
   - Logging estructurado de todas las operaciones
+
 - [ ] Implementar `src/services/limits_service.py` con clase `LimitsService`:
 
   - `check_can_process_email(user_id)` -> bool con detalles del límite
   - `get_current_usage(user_id, year, month)` con caché
   - `get_user_limits(user_id)` consultando suscripción activa
   - Implementar alertas cuando se acerca a límites (80%, 90%, 95%)
+
 - [ ] Crear middleware de límites para la API:
 
   - Decorador `@check_usage_limits` para endpoints críticos
   - Respuestas HTTP 429 con headers informativos
   - Rate limiting diferenciado por tier de suscripción
+
 - [ ] Implementar sistema de notificaciones:
 
   - Email cuando se alcanza 80% del límite mensual
   - Notificación in-app cuando se excede límite
   - Sugerencias de upgrade de plan
+
 - [ ] Crear jobs de mantenimiento:
 
   - Limpieza de datos de uso antiguos (>12 meses)
   - Recálculo de estadísticas en caso de inconsistencias
   - Reportes mensuales de uso por usuario
+
 - [ ] Implementar métricas y monitoreo:
 
   - Contador de emails procesados por segundo
@@ -470,6 +478,7 @@
   - Botón de "Detectar configuración" para proveedores comunes
   - Test de conexión con feedback visual
   - Guardar y redirigir a dashboard
+
 - [ ] Crear componente `Dashboard.jsx` con 4 secciones:
 
   - Header con estadísticas resumidas en cards:
@@ -480,14 +489,17 @@
   - Gráfico de barras con emails por día (últimos 7 días)
   - Lista de automatizaciones activas
   - Botón flotante para añadir automatización
+
 - [ ] Implementar hooks para datos:
 
   - `useStatistics()` con polling cada 60 segundos
   - `useAutomations()` con refetch en cambios
+
 - [ ] Crear componentes reutilizables:
 
   - `StatCard` para mostrar métricas
   - `AutomationCard` con toggle y preview
+
 - [ ] Añadir skeleton loaders mientras cargan datos
 - [ ] Integrar indicadores de límites en el dashboard:
 
@@ -544,6 +556,7 @@
   - Posibilidad de añadir/eliminar cuentas
   - Botón de cerrar sesión
   - Zona de peligro para eliminar cuenta
+
 - [ ] Implementar tema oscuro/claro con toggle
 - [ ] Añadir animaciones y transiciones:
 
@@ -551,22 +564,26 @@
   - Slide in para modales
   - Pulse en elementos loading
   - Success animations en acciones completadas
+
 - [ ] Crear página 404 y manejo de errores global
 - [ ] Implementar PWA básico:
 
   - Service worker para caché
   - Manifest.json
   - Iconos para diferentes tamaños
+
 - [ ] Optimizar bundle:
 
   - Code splitting por rutas
   - Lazy loading de componentes pesados
   - Compresión de assets
+
 - [ ] Crear script `start_frontend.py` que:
 
   - Instale dependencias si no existen
   - Compile en modo desarrollo
   - Abra el navegador automáticamente
+
 - [ ] Añadir sección de uso y facturación en perfil:
 
   - Mostrar uso actual vs límites del plan
@@ -590,22 +607,26 @@
   - Servicio frontend (Vite dev server)
   - Servicio de monitoreo (inbox_monitor)
   - Redis para caché (futuro)
+
 - [ ] Crear scripts de desarrollo:
 
   - `scripts/setup_dev.py`: Configurar entorno completo
   - `scripts/reset_db.py`: Limpiar y recrear base de datos
   - `scripts/seed_data.py`: Datos de prueba
+
 - [ ] Escribir suite de tests de integración:
 
   - Flujo completo de registro → configuración → automatización
   - Test de procesamiento de email end-to-end
   - Test de concurrencia en monitoreo
+
 - [ ] Actualizar `README.md` con:
 
   - Arquitectura del sistema
   - Instrucciones de instalación paso a paso
   - Variables de entorno necesarias
   - Guía de contribución
+
 - [ ] Crear `docs/API.md` con documentación de endpoints
 - [ ] Generar requerimientos actualizados
 - [ ] Crear checklist de pre-producción

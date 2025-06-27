@@ -134,6 +134,151 @@ class Question(Base, TimestampMixin):
         return question
     
     @classmethod
+    def create_with_variants(cls, db_session, user_id: int, original_question: str, 
+                           generate_variants: bool = True, variant_count: int = 5) -> dict:
+        """
+        Crea una nueva pregunta con variantes generadas automáticamente.
+        
+        Este método está diseñado para el flujo de frontend donde el usuario
+        quiere ver variantes sugeridas para aprobar, editar o eliminar.
+        
+        Args:
+            db_session: Sesión de base de datos
+            user_id (int): ID del usuario
+            original_question (str): Texto de la pregunta original
+            generate_variants (bool): Si generar variantes automáticamente
+            variant_count (int): Número de variantes a generar (máximo 10)
+            
+        Returns:
+            dict: {
+                'question': Question instance,
+                'original_variant': QuestionVariant instance,
+                'generated_variants': List[QuestionVariant],
+                'total_variants': int,
+                'generation_stats': dict
+            }
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos
+            RuntimeError: Si hay error generando variantes
+        """
+        # Validaciones
+        if variant_count < 0 or variant_count > 10:
+            raise ValueError("El número de variantes debe estar entre 0 y 10")
+        
+        try:
+            # Crear la pregunta base (incluye variante original)
+            question = cls.create(db_session, user_id, original_question)
+            
+            # Obtener la variante original creada
+            original_variant = db_session.query(QuestionVariant).filter(
+                QuestionVariant.question_id == question.id
+            ).first()
+            
+            generated_variants = []
+            generation_stats = {
+                'requested': variant_count if generate_variants else 0,
+                'successful': 0,
+                'failed': 0,
+                'errors': []
+            }
+            
+            if generate_variants and variant_count > 0:
+                # Generar variantes usando el prompt de variantes
+                try:
+                    variant_texts = cls._generate_variant_texts(original_question, variant_count)
+                    
+                    for i, variant_text in enumerate(variant_texts):
+                        try:
+                            # Crear cada variante con su embedding
+                            new_variant = QuestionVariant.create(db_session, question.id, variant_text)
+                            
+                            # Validar diversidad de la variante
+                            quality_check = new_variant.validate_variant_quality(db_session, min_diversity=0.15)
+                            
+                            if quality_check['is_valid']:
+                                generated_variants.append(new_variant)
+                                generation_stats['successful'] += 1
+                            else:
+                                # Variante muy similar, eliminar
+                                db_session.delete(new_variant)
+                                generation_stats['failed'] += 1
+                                generation_stats['errors'].append(f"Variante {i+1}: {quality_check['error']}")
+                                
+                        except Exception as e:
+                            generation_stats['failed'] += 1
+                            generation_stats['errors'].append(f"Variante {i+1}: {str(e)}")
+                            continue
+                    
+                except Exception as e:
+                    generation_stats['errors'].append(f"Error generando textos de variantes: {str(e)}")
+            
+            # Flush para obtener IDs de las variantes generadas
+            db_session.flush()
+            
+            return {
+                'question': question,
+                'original_variant': original_variant,
+                'generated_variants': generated_variants,
+                'total_variants': 1 + len(generated_variants),  # Original + generadas
+                'generation_stats': generation_stats
+            }
+            
+        except Exception as e:
+            db_session.rollback()
+            raise RuntimeError(f"Error creando pregunta con variantes: {str(e)}")
+    
+    @classmethod
+    def _generate_variant_texts(cls, original_question: str, count: int) -> List[str]:
+        """
+        Genera textos de variantes usando el modelo de lenguaje.
+        
+        Args:
+            original_question (str): Pregunta original
+            count (int): Número de variantes a generar
+            
+        Returns:
+            List[str]: Lista de textos de variantes generadas
+            
+        Raises:
+            RuntimeError: Si hay error en la generación
+        """
+        try:
+            from ..agents import Agents
+            from ..prompts import GENERATE_QUESTION_VARIANTS_PROMPT
+            from ..structure_outputs import QuestionVariantsOutput
+            
+            # Crear instancia del agente
+            agents = Agents()
+            
+            # Preparar el prompt
+            prompt_input = {
+                "original_question": original_question,
+                "variant_count": count
+            }
+            
+            # Generar variantes usando el LLM
+            result = agents.llm.with_structured_output(QuestionVariantsOutput).invoke(
+                GENERATE_QUESTION_VARIANTS_PROMPT.format(**prompt_input)
+            )
+            
+            # Extraer textos de variantes
+            variant_texts = []
+            if hasattr(result, 'variants') and result.variants:
+                for variant in result.variants[:count]:  # Limitar al número solicitado
+                    if variant and variant.strip() and variant.strip() != original_question:
+                        variant_texts.append(variant.strip())
+            
+            return variant_texts  # Retornar solo las variantes válidas generadas
+            
+        except Exception as e:
+            # Si falla el LLM, retornar lista vacía - es mejor que variantes artificiales
+            logger.warning(f"⚠️  Error generando variantes con LLM: {e}")
+            return []
+    
+
+    
+    @classmethod
     def import_from_csv(cls, db_session, user_id: int, csv_content: Union[str, io.StringIO]) -> Dict[str, Union[int, List[str]]]:
         """
         Importa múltiples Q&A desde contenido CSV.

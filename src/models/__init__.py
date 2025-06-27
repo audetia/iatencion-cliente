@@ -6,7 +6,7 @@ y proporciona funciones de conveniencia para la gestión de la base de datos.
 """
 
 # Importar base y funciones de utilidad
-from .base import Base, TimestampMixin, create_tables, drop_tables
+from .base import Base, TimestampMixin
 
 # Importar todos los modelos
 from .user import User
@@ -19,9 +19,7 @@ from .statistics import EmailProcessed, UserUsageMonthly, EmailActionType
 __all__ = [
     # Base y utilidades
     'Base',
-    'TimestampMixin', 
-    'create_tables',
-    'drop_tables',
+    'TimestampMixin',
     
     # Modelos
     'User',
@@ -87,8 +85,6 @@ def verify_model_relationships():
         issues.append("Answer.question relationship missing")
     
     # Verificar relaciones Automation
-    if not hasattr(Automation, 'user'):
-        issues.append("Automation.user relationship missing")
     if not hasattr(Automation, 'email_account'):
         issues.append("Automation.email_account relationship missing")
     if not hasattr(Automation, 'response_automation'):

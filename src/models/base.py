@@ -2,9 +2,6 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, event
 from sqlalchemy.ext.declarative import declarative_base
 
-# Importar el gestor de base de datos
-from ..database import db_manager
-
 # Base declarativa
 Base = declarative_base()
 
@@ -30,11 +27,5 @@ def timestamp_before_update(mapper, connection, target):
     if hasattr(target, 'updated_at'):
         target.updated_at = datetime.utcnow()
 
-# Funciones de conveniencia
-def create_tables():
-    """Crea todas las tablas definidas en los modelos"""
-    return db_manager.create_tables(Base.metadata)
-
-def drop_tables():
-    """Elimina todas las tablas (¡CUIDADO en producción!)"""
-    return db_manager.drop_tables(Base.metadata)
+# Nota: Las funciones create_tables() y drop_tables() se han movido a DatabaseManager
+# para evitar dependencias circulares. Usar db_manager.create_tables() directamente.

@@ -39,3 +39,10 @@ class ProofReaderOutput(BaseModel):
         ..., 
         description="Indicates whether the email is ready to be sent (true) or requires rewriting (false)."
     )
+
+# **Question Variants Output**
+class QuestionVariantsOutput(BaseModel):
+    variants: List[str] = Field(
+        ..., 
+        description="A list of semantically diverse question variations that maintain the original intent and meaning."
+    )

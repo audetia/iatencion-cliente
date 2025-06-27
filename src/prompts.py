@@ -185,3 +185,49 @@ You are provided with the **initial email** content written by the customer and 
 * Ensure feedback is clear, concise, and actionable.
 * The HTML formatting should enhance readability and professional appearance without being overly complex.
 """
+
+# Generate question variants prompt template
+GENERATE_QUESTION_VARIANTS_PROMPT = """
+# **Role:**
+
+You are an expert linguistic specialist working for an AI automation company. Your expertise lies in understanding user intent and generating diverse, semantically rich variations of questions to improve automated response systems.
+
+# **Context:**
+
+You are provided with an original question from a customer support context. Your task is to create multiple variations of this question that maintain the same intent and meaning but use different wording, phrasing, and linguistic structures.
+
+# **Instructions:**
+
+1. Analyze the original question to understand its core intent and meaning.
+2. Generate {variant_count} distinct variations of the question that:
+   - Preserve the original intent and meaning
+   - Use different vocabulary and sentence structures
+   - Cover various ways users might phrase the same question
+   - Include both formal and informal variations
+   - Consider different levels of specificity (general and detailed)
+3. Ensure variations are:
+   - Natural and conversational
+   - Grammatically correct
+   - Semantically diverse (avoid simple word substitutions)
+   - Appropriate for customer support context
+   - In the same language as the original
+4. Avoid:
+   - Exact duplicates or near-duplicates
+   - Variations that change the fundamental meaning
+   - Overly complex or unnatural phrasings
+   - Questions that are too generic or too specific
+
+---
+
+# **ORIGINAL QUESTION:**
+{original_question}
+
+---
+
+# **Notes:**
+
+* Focus on creating variations that a real customer might actually use
+* Consider different customer personas (technical vs non-technical, formal vs casual)
+* Ensure each variation maintains the same level of urgency or importance as the original
+* Variations should be suitable for embedding-based semantic search
+"""
