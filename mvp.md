@@ -166,12 +166,11 @@
   - Obtener el `email_account_id` del estado
   - Recuperar las Q&A activas del usuario desde la base de datos
   - Para cada query RAG, buscar en las variantes de preguntas usando búsqueda vectorial
-- [ ] Crear nuevo método `dynamic_rag_search` que:
+- [X] Crear nuevo método `dynamic_rag_search` que:
   - Genere embedding de la query
   - Busque en `question_variants` usando pgvector
   - Retorne las respuestas asociadas ordenadas por relevancia
-- [ ] Modificar el prompt `GENERATE_RAG_ANSWER_PROMPT` para trabajar con respuestas personalizadas
-- [ ] Implementar fallback al sistema RAG original si no hay Q&A configuradas
+- [X] Modificar el prompt `GENERATE_RAG_ANSWER_PROMPT` para trabajar con respuestas personalizadas
 - [ ] Añadir logging detallado de qué preguntas se matchean
 - [ ] Crear método de caché para embeddings de queries frecuentes
 - [ ] Actualizar las estadísticas para registrar qué Q&A se utilizan

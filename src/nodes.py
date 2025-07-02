@@ -26,6 +26,7 @@ from colorama import Fore, Style
 from .agents import Agents
 from .tools.EmailTools import EmailToolsClass
 from .state import GraphState, Email
+from .database import db_manager
 import logging
 
 # Configure logging for nodes
@@ -101,6 +102,114 @@ class Nodes:
         
         return {"rag_queries": query_result.queries}
 
+    def dynamic_rag_search(self, user_id: str, query: str) -> dict:
+        """
+        Performs dynamic RAG search using vector similarity on user's Q&A.
+        
+        Uses embedding cache to improve performance and reduce API calls.
+        
+        Args:
+            user_id: The user ID to search Q&A for
+            query: The search query text
+            
+        Returns:
+            Dictionary with search results:
+            {
+                'success': bool,
+                'answer': str or None,
+                'similarity_score': float or None,
+                'matched_question': str or None,
+                'error': str or None,
+                'cache_hit': bool  # Indicates if embedding came from cache
+            }
+        """
+        try:
+            from .services.embedding_cache import get_embedding_cache
+            
+            logger.debug(f"Generating embedding for query: {query[:100]}...")
+            
+            # Try to get embedding from cache first
+            cache = get_embedding_cache()
+            query_embedding = cache.get(query)
+            cache_hit = query_embedding is not None
+            
+            if query_embedding is None:
+                # Cache miss - generate embedding and store it
+                query_embedding = self.agents.embeddings.embed_query(
+                    query, 
+                    output_dimensionality=1536
+                )
+                # Store in cache for future use
+                cache.put(query, query_embedding)
+                logger.debug(f"💾 Embedding generated and cached for query")
+            else:
+                logger.debug(f"🎯 Using cached embedding for query")
+            
+            # Search for similar questions using pgvector
+            search_results = db_manager.search_similar_questions(
+                user_id=user_id,
+                query_embedding=query_embedding,
+                threshold=0.7,  # Configurable threshold for similarity
+                limit=3
+            )
+            
+            if search_results['success'] and search_results['results']:
+                # Get the best matching result
+                best_match = search_results['results'][0]
+                similarity_score = best_match['matched_variant']['similarity_score']
+                
+                logger.info(f"Found match with similarity {similarity_score:.4f}")
+                logger.debug(f"Matched question: {best_match['original_question'][:100]}...")
+                
+                if best_match['answer']['has_answer']:
+                    answer_text = best_match['answer']['text']
+                    instructions = best_match['answer']['instructions']
+                    
+                    # Format the answer with instructions if available
+                    formatted_answer = answer_text
+                    if instructions:
+                        formatted_answer += f"\n\nInstrucciones adicionales: {instructions}"
+                    
+                    return {
+                        'success': True,
+                        'answer': formatted_answer,
+                        'similarity_score': similarity_score,
+                        'matched_question': best_match['original_question'],
+                        'error': None,
+                        'cache_hit': cache_hit
+                    }
+                else:
+                    logger.warning("Question found but no answer configured")
+                    return {
+                        'success': False,
+                        'answer': None,
+                        'similarity_score': similarity_score,
+                        'matched_question': best_match['original_question'],
+                        'error': 'Question found but no answer configured',
+                        'cache_hit': cache_hit
+                    }
+            else:
+                logger.info("No similar questions found")
+                return {
+                    'success': False,
+                    'answer': None,
+                    'similarity_score': None,
+                    'matched_question': None,
+                    'error': 'No similar questions found',
+                    'cache_hit': cache_hit
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in dynamic_rag_search: {e}")
+            return {
+                'success': False,
+                'answer': None,
+                'similarity_score': None,
+                'matched_question': None,
+                'error': str(e),
+                'cache_hit': False
+            }
+
     def retrieve_from_rag(self, state: GraphState) -> GraphState:
         """Retrieves information from user's personalized Q&A using vector search."""
         print(Fore.YELLOW + "Retrieving information from personalized Q&A...\n" + Style.RESET_ALL)
@@ -117,9 +226,6 @@ class Nodes:
             }
         
         try:
-            # Import database manager
-            from .database import db_manager
-            
             # Get email account information to extract user_id
             account_info_result = db_manager.get_email_account_info(email_account_id)
             if not account_info_result['success']:
@@ -141,56 +247,18 @@ class Nodes:
                     "needs_human_attention": True
                 }
             
-            # Process each RAG query using vector search
+            # Process each RAG query using dynamic RAG search
             for query in state["rag_queries"]:
                 logger.debug(f"Processing query: {query[:100]}...")
                 
-                try:
-                    # Generate embedding for the query
-                    query_embedding = self.agents.embeddings.embed_query(
-                        query, 
-                        output_dimensionality=1536
-                    )
-                    
-                    # Search for similar questions using database manager method
-                    search_results = db_manager.search_similar_questions(
-                        user_id=user_id,
-                        query_embedding=query_embedding,
-                        threshold=0.7,  # Lower threshold for better recall
-                        limit=3
-                    )
-                    
-                    if search_results['success'] and search_results['results']:
-                        # Use the best matching result
-                        best_match = search_results['results'][0]
-                        similarity_score = best_match['matched_variant']['similarity_score']
-                        
-                        logger.info(f"Found match with similarity {similarity_score:.4f}")
-                        logger.debug(f"Matched question: {best_match['original_question'][:100]}...")
-                        
-                        if best_match['answer']['has_answer']:
-                            answer_text = best_match['answer']['text']
-                            instructions = best_match['answer']['instructions']
-                            
-                            # Format the answer with instructions if available
-                            formatted_answer = answer_text
-                            if instructions:
-                                formatted_answer += f"\n\nInstrucciones adicionales: {instructions}"
-                            
-                            final_answer += f"**Pregunta:** {query}\n**Respuesta:** {formatted_answer}\n\n"
-                            logger.debug(f"Added answer for query: {query[:50]}...")
-                        else:
-                            logger.warning(f"Question found but no answer configured, marking for human attention")
-                            needs_human_attention = True
-                            break
-                    else:
-                        logger.info(f"No similar questions found for query: {query[:50]}...")
-                        # If no similar questions found, mark for human attention
-                        needs_human_attention = True
-                        break
-                        
-                except Exception as e:
-                    logger.error(f"Error processing query '{query[:50]}...': {e}")
+                # Use the new dynamic_rag_search method
+                search_result = self.dynamic_rag_search(user_id, query)
+                
+                if search_result['success']:
+                    final_answer += f"**Pregunta:** {query}\n**Respuesta:** {search_result['answer']}\n\n"
+                    logger.debug(f"Added answer for query: {query[:50]}...")
+                else:
+                    logger.info(f"No answer found for query: {query[:50]}... - {search_result['error']}")
                     needs_human_attention = True
                     break
                     
@@ -202,6 +270,16 @@ class Nodes:
             logger.info("Marking email for human attention due to no matching Q&A or errors")
         else:
             logger.info(f"Successfully retrieved {len(state['rag_queries'])} Q&A responses")
+            
+            # Log cache statistics periodically
+            try:
+                from .services.embedding_cache import get_cache_stats
+                cache_stats = get_cache_stats()
+                if cache_stats['total_requests'] % 10 == 0:  # Log every 10 requests
+                    logger.info(f"📊 Cache stats - Hit rate: {cache_stats['hit_rate_percentage']}% "
+                               f"({cache_stats['hits']}/{cache_stats['total_requests']} requests)")
+            except Exception:
+                pass  # Don't fail if cache stats unavailable
         
         return {
             "retrieved_documents": final_answer,
@@ -395,8 +473,6 @@ class Nodes:
             email_account_id = state.get("email_account_id", 1)  # Placeholder
             
             # 1. Obtener las automatizaciones activas de la cuenta
-            from .database import db_manager
-            
             logger.debug(f"Getting active automations for email_account_id: {email_account_id}")
             automations_result = db_manager.get_active_automations(email_account_id)
             
@@ -486,8 +562,6 @@ class Nodes:
                 return {"forward_error": "No automation ID in forward decision"}
             
             # Obtener detalles de la automatización de reenvío desde la base de datos
-            from .database import db_manager
-            
             logger.debug(f"Getting forward automation details for ID: {automation_id}")
             automation_details = db_manager.get_automation_details(automation_id)
             
