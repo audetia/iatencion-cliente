@@ -36,9 +36,9 @@ class Agents():
 
         """
         # QA assistant chat
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", task_type="semantic_similarity")
+        self.embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-exp-03-07", task_type="semantic_similarity")
 
-        vectorstore = Chroma(persist_directory="db", embedding_function=embeddings)
+        vectorstore = Chroma(persist_directory="db", embedding_function=self.embeddings)
         retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
         # Categorize email chain
@@ -92,4 +92,14 @@ class Agents():
         self.email_proofreader = (
             proofreader_prompt | 
             llama.with_structured_output(ProofReaderOutput) 
+        )
+
+        # Check forward rules for email routing
+        forward_decision_prompt = PromptTemplate(
+            template=FORWARD_DECISION_PROMPT,
+            input_variables=["email_content", "qa_topics", "forward_rules"]
+        )
+        self.check_forward_rules = (
+            forward_decision_prompt |
+            llama.with_structured_output(ForwardDecisionOutput)
         )

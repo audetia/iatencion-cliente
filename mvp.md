@@ -142,18 +142,19 @@
   - Reciba lista de descripciones de reenvíos configurados
   - Reciba lista de temas de Q&A (para evitar reenviar preguntas respondibles)
   - Determine si el email coincide con algún criterio de reenvío
-- [ ] Crear estructura de salida `ForwardDecisionOutput` en `src/structure_outputs.py`:
+- [X] Crear estructura de salida `ForwardDecisionOutput` en `src/structure_outputs.py`:
   - `should_forward`: bool
   - `forward_automation_id`: Optional[int]
   - `confidence_score`: float
-- [ ] Añadir nuevo agente `check_forward_rules` en `src/agents.py`
-- [ ] Crear nuevo nodo `evaluate_forward_rules` en `src/nodes.py` que:
+- [X] Añadir nuevo agente `check_forward_rules` en `src/agents.py`
+- [X] Crear nuevo nodo `evaluate_forward_rules` en `src/nodes.py` que:
   - Obtenga las automatizaciones activas de la cuenta
   - Ejecute el agente de decisión de reenvío
   - Registre la decisión en el estado
-- [ ] Modificar `src/graph.py` para incluir el nuevo nodo después de `categorize_email`
-- [ ] Añadir edge condicional que dirija a reenvío o continúe con el flujo normal
-- [ ] Actualizar `GraphState` en `src/state.py` para incluir información de reenvío
+- [X] Modificar `src/graph.py` para incluir el nuevo nodo después de `categorize_email`
+- [X] Añadir edge condicional que dirija a reenvío o continúe con el flujo normal
+- [X] Actualizar `GraphState` en `src/state.py` para incluir información de reenvío
+- [X] Crear la lógica de reenvio de correo
 
 ### Día 7: Implementación de Q&A Personalizado con RAG
 
@@ -161,7 +162,7 @@
 
 **Subtareas:**
 
-- [ ] Modificar `src/nodes.py` en el método `retrieve_from_rag`:
+- [X] Modificar `src/nodes.py` en el método `retrieve_from_rag`:
   - Obtener el `email_account_id` del estado
   - Recuperar las Q&A activas del usuario desde la base de datos
   - Para cada query RAG, buscar en las variantes de preguntas usando búsqueda vectorial

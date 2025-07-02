@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Annotated
+from typing import List, Annotated, Optional, Dict, Any
 from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
@@ -22,3 +22,13 @@ class GraphState(TypedDict):
     writer_messages: Annotated[list, add_messages]
     sendable: bool
     trials: int
+    # Forward decision information
+    email_account_id: Optional[int]
+    forward_decision: Optional[Dict[str, Any]]
+    forward_automations_available: Optional[int]
+    qa_topics_available: Optional[int]
+    forward_error: Optional[str]
+    needs_human_attention: Optional[bool]
+    # Forward result information
+    forward_result: Optional[Dict[str, Any]]
+    forward_completed: Optional[bool]

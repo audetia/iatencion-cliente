@@ -65,6 +65,8 @@ class Workflow():
         workflow.add_node("load_inbox_emails", nodes.load_new_emails)
         workflow.add_node("is_email_inbox_empty", nodes.is_email_inbox_empty)
         workflow.add_node("categorize_email", nodes.categorize_email)
+        workflow.add_node("evaluate_forward_rules", nodes.evaluate_forward_rules)
+        workflow.add_node("forward_email", nodes.forward_email)
         workflow.add_node("construct_rag_queries", nodes.construct_rag_queries)
         workflow.add_node("retrieve_from_rag", nodes.retrieve_from_rag)
         workflow.add_node("email_writer", nodes.write_draft_email)
@@ -89,17 +91,57 @@ class Workflow():
             }
         )
 
-        # route email based on category
+        # Add forward evaluation after categorization (except for spam and unrelated)
+        def route_after_categorization(state: GraphState) -> str:
+            """Routes email after categorization - evaluates forward rules or handles special cases."""
+            category = state["email_category"]
+            if category == "unrelated":
+                return "unrelated"
+            elif category == "spam":
+                return "spam"
+            else:
+                # For all other categories (product_enquiry, lead_enquiry, customer_complaint, customer_feedback)
+                # evaluate forward rules first
+                return "evaluate_forward"
+
         workflow.add_conditional_edges(
-            "categorize_email",
-            nodes.route_email_based_on_category,
+            "categorize_email", 
+            route_after_categorization,
             {
-                "product related": "construct_rag_queries",
-                "not product related": "email_writer", # Feedback or Complaint
+                "evaluate_forward": "evaluate_forward_rules",
                 "unrelated": "skip_unrelated_email",
                 "spam": "skip_spam_email"
             }
         )
+
+        # Add routing after forward evaluation
+        def route_after_forward_evaluation(state: GraphState) -> str:
+            """Routes email after forward evaluation - either forward or continue normal flow."""
+            forward_decision = state.get("forward_decision")
+            
+            if forward_decision and forward_decision.get("should_forward"):
+                return "forward_email"
+            else:
+                # Continue with normal flow based on original category
+                category = state["email_category"]
+                if category in ["product_enquiry", "lead_enquiry"]:
+                    return "product_related"
+                else:
+                    # customer_complaint, customer_feedback
+                    return "not_product_related"
+
+        workflow.add_conditional_edges(
+            "evaluate_forward_rules",
+            route_after_forward_evaluation,
+            {
+                "forward_email": "forward_email",  # Use actual forward node
+                "product_related": "construct_rag_queries", 
+                "not_product_related": "email_writer"
+            }
+        )
+
+        # Add edge from forward_email back to check for more emails
+        workflow.add_edge("forward_email", "is_email_inbox_empty")
 
         # pass constructed queries to RAG chain to retrieve information
         workflow.add_edge("construct_rag_queries", "retrieve_from_rag")
@@ -113,7 +155,6 @@ class Workflow():
                 "ai_handle": "email_writer"
             }
         )
-
 
         # Edge from retrieve_from_rag to email_writer is now handled by conditional logic above
         workflow.add_edge("email_writer", "email_proofreader")

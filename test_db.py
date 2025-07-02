@@ -64,50 +64,62 @@ def test_user_crud():
     print("🔍 Probando operaciones CRUD con User...")
     
     try:
-        with db_manager.get_db_session() as db:
-            # CREATE - Crear un usuario de prueba
-            print("  📝 Creando usuario...")
-            test_user = User(
-                email="test@example.com",
-                name="Usuario de Prueba",
-                is_verified=False
-            )
-            db.add(test_user)
-            db.flush()  # Para obtener el ID sin hacer commit
-            user_id = test_user.id
-            print(f"  ✅ Usuario creado con ID: {user_id}")
-            
-            # READ - Leer el usuario
-            print("  📖 Leyendo usuario...")
-            found_user = db.query(User).filter(User.id == user_id).first()
-            if found_user:
-                print(f"  ✅ Usuario encontrado: {found_user}")
-                print(f"     - Email: {found_user.email}")
-                print(f"     - Nombre: {found_user.name}")
-                print(f"     - Verificado: {found_user.is_verified}")
-                print(f"     - Activo: {found_user.is_active}")
-                print(f"     - Creado: {found_user.created_at}")
-            else:
-                print("  ❌ Usuario no encontrado")
-                return False
-            
-            # UPDATE - Verificar usuario
-            print("  ✏️  Verificando usuario...")
-            found_user.verify()
-            db.flush()
-            print(f"  ✅ Usuario verificado: {found_user.is_verified}")
-            print(f"  ✅ Usuario activo: {found_user.is_active}")
-            
-            # Test de métodos adicionales
-            print("  🧪 Probando métodos adicionales...")
-            user_dict = found_user.to_dict()
-            print(f"  ✅ to_dict(): {user_dict}")
-            
-            # DELETE - Eliminar usuario de prueba
-            print("  🗑️  Eliminando usuario de prueba...")
-            db.delete(found_user)
-            print("  ✅ Usuario eliminado")
-            
+        # CREATE - Crear un usuario de prueba usando DatabaseManager
+        print("  📝 Creando usuario...")
+        create_result = db_manager.create_user(
+            email="test@example.com",
+            name="Usuario de Prueba"
+        )
+        
+        if not create_result['success']:
+            print(f"  ❌ Error creando usuario: {create_result}")
+            return False
+        
+        user_id = create_result['user']['id']
+        print(f"  ✅ Usuario creado con ID: {user_id}")
+        
+        # READ - Leer el usuario usando DatabaseManager
+        print("  📖 Leyendo usuario...")
+        found_user = db_manager.get_user_by_id(user_id)
+        if found_user:
+            print(f"  ✅ Usuario encontrado: {found_user['email']}")
+            print(f"     - Email: {found_user['email']}")
+            print(f"     - Nombre: {found_user['name']}")
+            print(f"     - Verificado: {found_user['is_verified']}")
+            print(f"     - Activo: {found_user['is_active']}")
+            print(f"     - Creado: {found_user['created_at']}")
+        else:
+            print("  ❌ Usuario no encontrado")
+            return False
+        
+        # UPDATE - Verificar usuario usando DatabaseManager
+        print("  ✏️  Verificando usuario...")
+        verify_result = db_manager.verify_user(user_id)
+        if verify_result['success']:
+            print(f"  ✅ Usuario verificado: {verify_result['user']['is_verified']}")
+            print(f"  ✅ Usuario activo: {verify_result['user']['is_active']}")
+        else:
+            print(f"  ❌ Error verificando usuario: {verify_result}")
+            return False
+        
+        # Test de métodos adicionales - actualizar nombre
+        print("  🧪 Probando actualización de datos...")
+        update_result = db_manager.update_user(user_id, name="Usuario Actualizado")
+        if update_result['success']:
+            print(f"  ✅ Usuario actualizado: {update_result['user']['name']}")
+        else:
+            print(f"  ❌ Error actualizando usuario: {update_result}")
+            return False
+        
+        # READ final para verificar cambios
+        print("  📖 Verificando cambios...")
+        final_user = db_manager.get_user_by_id(user_id)
+        if final_user and final_user['name'] == "Usuario Actualizado":
+            print("  ✅ Cambios persistidos correctamente")
+        else:
+            print("  ❌ Los cambios no se persistieron")
+            return False
+        
         print("✅ Todas las operaciones CRUD exitosas")
         return True
         
@@ -121,34 +133,43 @@ def test_user_constraints():
     print("🔍 Probando restricciones del modelo User...")
     
     try:
-        with db_manager.get_db_session() as db:
-            # Crear primer usuario
-            user1 = User(
-                email="unique@example.com",
-                name="Usuario 1"
-            )
-            db.add(user1)
-            db.flush()
-            print("  ✅ Primer usuario creado")
-            
-            # Intentar crear usuario con email duplicado
-            user2 = User(
+        # Crear primer usuario usando DatabaseManager
+        print("  📝 Creando primer usuario...")
+        create_result1 = db_manager.create_user(
+            email="unique@example.com",
+            name="Usuario 1"
+        )
+        
+        if not create_result1['success']:
+            print(f"  ❌ Error creando primer usuario: {create_result1}")
+            return False
+        
+        print("  ✅ Primer usuario creado")
+        
+        # Intentar crear usuario con email duplicado
+        print("  🚫 Intentando crear usuario con email duplicado...")
+        try:
+            create_result2 = db_manager.create_user(
                 email="unique@example.com",  # Email duplicado
                 name="Usuario 2"
             )
-            db.add(user2)
             
-            try:
-                db.flush()
+            if create_result2['success']:
                 print("  ❌ No se detectó email duplicado")
                 return False
-            except Exception as e:
+            else:
                 print("  ✅ Restricción de email único funcionando")
-                db.rollback()
                 
-            # Limpiar
-            db.delete(user1)
-            
+        except ValueError as e:
+            if "ya existe" in str(e).lower():
+                print("  ✅ Restricción de email único funcionando")
+            else:
+                print(f"  ❌ Error inesperado: {e}")
+                return False
+        except Exception as e:
+            print(f"  ❌ Error inesperado: {e}")
+            return False
+        
         print("✅ Restricciones User funcionando correctamente")
         return True
         
@@ -162,87 +183,117 @@ def test_email_account_crud():
     print("🔍 Probando operaciones CRUD con EmailAccount...")
     
     try:
-        with db_manager.get_db_session() as db:
-            # Primero crear un usuario de prueba
-            test_user = User(
-                email="test@example.com",
-                name="Usuario de Prueba"
-            )
-            db.add(test_user)
-            db.flush()
-            user_id = test_user.id
-            print(f"  📝 Usuario creado con ID: {user_id}")
-            
-            # CREATE - Crear una cuenta de email
-            print("  📝 Creando cuenta de email...")
-            test_account = EmailAccount(
-                user_id=user_id,
-                email="cuenta@gmail.com",
-                imap_server="imap.gmail.com",
-                imap_port=993,
-                smtp_server="smtp.gmail.com",
-                smtp_port=587,
-                encrypted_password="contraseña_encriptada_fake",
-                is_active=True
-            )
-            db.add(test_account)
-            db.flush()
-            account_id = test_account.id
-            print(f"  ✅ Cuenta de email creada con ID: {account_id}")
-            
-            # READ - Leer la cuenta
-            print("  📖 Leyendo cuenta de email...")
-            found_account = db.query(EmailAccount).filter(EmailAccount.id == account_id).first()
-            if found_account:
-                print(f"  ✅ Cuenta encontrada: {found_account}")
-                print(f"     - Email: {found_account.email}")
-                print(f"     - Servidor IMAP: {found_account.imap_server}:{found_account.imap_port}")
-                print(f"     - Estado: {found_account.is_active}")
-                print(f"     - Display name: {found_account.display_name}")
-            else:
-                print("  ❌ Cuenta no encontrada")
-                return False
-            
-            # Test de relación
-            print("  🔗 Probando relación con User...")
-            if found_account.user:
-                print(f"  ✅ Relación funcionando: {found_account.user.name}")
-            else:
-                print("  ❌ Relación no funcionando")
-                return False
-            
-            # Test de propiedades
-            print("  🧪 Probando propiedades...")
-            imap_config = found_account.imap_config
-            smtp_config = found_account.smtp_config
-            print(f"  ✅ IMAP config: {imap_config}")
-            print(f"  ✅ SMTP config: {smtp_config}")
-            
-            # UPDATE - Desactivar cuenta
-            print("  ✏️  Desactivando cuenta...")
-            found_account.deactivate()
-            db.flush()
-            print(f"  ✅ Cuenta desactivada: {found_account.is_active}")
-            
-            # Test toggle
-            print("  🔄 Probando toggle...")
-            new_state = found_account.toggle_active()
-            print(f"  ✅ Estado después de toggle: {new_state}")
-            
-            # Test de serialización
-            print("  📄 Probando serialización...")
-            account_dict = found_account.to_dict()
-            print(f"  ✅ to_dict() (sin password): {len(account_dict)} campos")
-            
-            account_dict_with_pass = found_account.to_dict(include_password=True)
-            print(f"  ✅ to_dict() (con password): {len(account_dict_with_pass)} campos")
-            
-            # DELETE - Eliminar datos de prueba
-            print("  🗑️  Eliminando datos de prueba...")
-            db.delete(found_account)
-            db.delete(test_user)
-            print("  ✅ Datos eliminados")
-            
+        # Primero crear un usuario de prueba usando DatabaseManager
+        print("  📝 Creando usuario de prueba...")
+        user_result = db_manager.create_user(
+            email="test@example.com",
+            name="Usuario de Prueba"
+        )
+        
+        if not user_result['success']:
+            print(f"  ❌ Error creando usuario: {user_result}")
+            return False
+        
+        user_id = user_result['user']['id']
+        print(f"  ✅ Usuario creado con ID: {user_id}")
+        
+        # CREATE - Crear una cuenta de email usando DatabaseManager
+        print("  📝 Creando cuenta de email...")
+        account_result = db_manager.add_email_account(
+            user_id=user_id,
+            email="cuenta@gmail.com",
+            imap_config={
+                'server': "imap.gmail.com",
+                'port': 993
+            },
+            smtp_config={
+                'server': "smtp.gmail.com",
+                'port': 587
+            },
+            password="contraseña_de_prueba"
+        )
+        
+        if not account_result['success']:
+            print(f"  ❌ Error creando cuenta: {account_result}")
+            return False
+        
+        account_id = account_result['account']['id']
+        print(f"  ✅ Cuenta de email creada con ID: {account_id}")
+        
+        # READ - Leer la cuenta usando DatabaseManager
+        print("  📖 Leyendo cuenta de email...")
+        accounts_result = db_manager.get_user_email_accounts(user_id)
+        
+        if not accounts_result['success'] or not accounts_result['accounts']:
+            print(f"  ❌ Error obteniendo cuentas: {accounts_result}")
+            return False
+        
+        found_account = accounts_result['accounts'][0]
+        print(f"  ✅ Cuenta encontrada: {found_account['email']}")
+        print(f"     - Email: {found_account['email']}")
+        print(f"     - Servidor IMAP: {found_account['imap_server']}:{found_account['imap_port']}")
+        print(f"     - Estado: {found_account['is_active']}")
+        
+        # Test de información básica
+        print("  🔗 Probando información de cuenta...")
+        account_info_result = db_manager.get_email_account_info(account_id)
+        if account_info_result['success']:
+            account_info = account_info_result['account_info']
+            print(f"  ✅ Información obtenida: {account_info['email']}")
+            print(f"     - User ID: {account_info['user_id']}")
+            print(f"     - Estado activo: {account_info['is_active']}")
+        else:
+            print(f"  ❌ Error obteniendo información: {account_info_result}")
+            return False
+        
+        # UPDATE - Desactivar cuenta usando DatabaseManager
+        print("  ✏️  Desactivando cuenta...")
+        update_result = db_manager.update_email_account(
+            account_id, 
+            is_active=False
+        )
+        
+        if update_result['success']:
+            print(f"  ✅ Cuenta desactivada: {update_result['account']['is_active']}")
+        else:
+            print(f"  ❌ Error desactivando cuenta: {update_result}")
+            return False
+        
+        # Test de actualización de email
+        print("  🔄 Probando actualización de email...")
+        update_email_result = db_manager.update_email_account(
+            account_id,
+            email="nuevo_email@gmail.com"
+        )
+        
+        if update_email_result['success']:
+            print(f"  ✅ Email actualizado: {update_email_result['account']['email']}")
+        else:
+            print(f"  ❌ Error actualizando email: {update_email_result}")
+            return False
+        
+        # Test de credenciales
+        print("  🔐 Probando obtención de credenciales...")
+        creds_result = db_manager.get_email_account_credentials(account_id)
+        if creds_result['success']:
+            creds = creds_result['credentials']
+            print(f"  ✅ Credenciales obtenidas para: {creds['email']}")
+            print(f"     - IMAP: {creds['imap_config']['server']}")
+            print(f"     - SMTP: {creds['smtp_config']['server']}")
+        else:
+            print(f"  ❌ Error obteniendo credenciales: {creds_result}")
+            return False
+        
+        # DELETE - Eliminar cuenta usando DatabaseManager
+        print("  🗑️  Eliminando cuenta de prueba...")
+        delete_result = db_manager.delete_email_account(account_id)
+        
+        if delete_result['success']:
+            print(f"  ✅ Cuenta eliminada: {delete_result['deleted_account']['email']}")
+        else:
+            print(f"  ❌ Error eliminando cuenta: {delete_result}")
+            return False
+        
         print("✅ Todas las operaciones CRUD EmailAccount exitosas")
         return True
         
@@ -256,72 +307,87 @@ def test_email_account_validation():
     print("🔍 Probando validaciones de EmailAccount...")
     
     try:
-        with db_manager.get_db_session() as db:
-            # Crear usuario de prueba
-            test_user = User(email="validation@test.com", name="Test User")
-            db.add(test_user)
-            db.flush()
-            
-            # Test cuenta válida
-            print("  ✅ Probando cuenta válida...")
-            valid_account = EmailAccount(
-                user_id=test_user.id,
+        # Crear usuario de prueba
+        print("  📝 Creando usuario de prueba...")
+        user_result = db_manager.create_user(
+            email="validation@test.com", 
+            name="Test User"
+        )
+        
+        if not user_result['success']:
+            print(f"  ❌ Error creando usuario: {user_result}")
+            return False
+        
+        user_id = user_result['user']['id']
+        
+        # Test cuenta válida
+        print("  ✅ Probando cuenta válida...")
+        try:
+            valid_result = db_manager.add_email_account(
+                user_id=user_id,
                 email="valid@gmail.com",
-                imap_server="imap.gmail.com",
-                imap_port=993,
-                smtp_server="smtp.gmail.com",
-                smtp_port=587,
-                encrypted_password="valid_password"
+                imap_config={'server': "imap.gmail.com", 'port': 993},
+                smtp_config={'server': "smtp.gmail.com", 'port': 587},
+                password="valid_password"
             )
             
-            validation = valid_account.validate_config()
-            if validation['is_valid']:
-                print("  ✅ Cuenta válida correctamente validada")
+            if valid_result['success']:
+                print("  ✅ Cuenta válida creada correctamente")
+                # Limpiar la cuenta válida
+                db_manager.delete_email_account(valid_result['account']['id'])
             else:
-                print(f"  ❌ Cuenta válida marcada como inválida: {validation['errors']}")
+                print(f"  ❌ Cuenta válida rechazada: {valid_result}")
                 return False
-            
-            # Test email inválido
-            print("  🚫 Probando email inválido...")
-            invalid_account = EmailAccount(
-                user_id=test_user.id,
+        except Exception as e:
+            print(f"  ❌ Error con cuenta válida: {e}")
+            return False
+        
+        # Test email inválido
+        print("  🚫 Probando email inválido...")
+        try:
+            invalid_email_result = db_manager.add_email_account(
+                user_id=user_id,
                 email="email_sin_arroba",  # Email inválido
-                imap_server="imap.gmail.com",
-                imap_port=993,
-                smtp_server="smtp.gmail.com",
-                smtp_port=587,
-                encrypted_password="password"
+                imap_config={'server': "imap.gmail.com", 'port': 993},
+                smtp_config={'server': "smtp.gmail.com", 'port': 587},
+                password="password"
             )
             
-            validation = invalid_account.validate_config()
-            if not validation['is_valid'] and 'Email inválido' in validation['errors']:
-                print("  ✅ Email inválido detectado correctamente")
-            else:
+            if invalid_email_result['success']:
                 print("  ❌ Email inválido no detectado")
                 return False
-            
-            # Test puerto inválido
-            print("  🚫 Probando puerto inválido...")
-            invalid_port_account = EmailAccount(
-                user_id=test_user.id,
+            else:
+                print("  ✅ Email inválido detectado correctamente")
+        except ValueError as e:
+            if "email" in str(e).lower():
+                print("  ✅ Email inválido detectado correctamente")
+            else:
+                print(f"  ❌ Error inesperado: {e}")
+                return False
+        
+        # Test puerto inválido
+        print("  🚫 Probando puerto inválido...")
+        try:
+            invalid_port_result = db_manager.add_email_account(
+                user_id=user_id,
                 email="test@example.com",
-                imap_server="imap.example.com",
-                imap_port=99999,  # Puerto inválido
-                smtp_server="smtp.example.com",
-                smtp_port=587,
-                encrypted_password="password"
+                imap_config={'server': "imap.example.com", 'port': 99999},  # Puerto inválido
+                smtp_config={'server': "smtp.example.com", 'port': 587},
+                password="password"
             )
             
-            validation = invalid_port_account.validate_config()
-            if not validation['is_valid'] and any('Puerto IMAP inválido' in error for error in validation['errors']):
+            if invalid_port_result['success']:
+                print("  ❌ Puerto inválido no detectado")
+                return False
+            else:
+                print("  ✅ Puerto inválido detectado correctamente")
+        except ValueError as e:
+            if "puerto" in str(e).lower():
                 print("  ✅ Puerto inválido detectado correctamente")
             else:
-                    print("  ❌ Puerto inválido no detectado")
-                    return False
-            
-            # Limpiar
-            db.delete(test_user)
-            
+                print(f"  ❌ Error inesperado: {e}")
+                return False
+        
         print("✅ Validaciones EmailAccount funcionando correctamente")
         return True
         
@@ -335,52 +401,89 @@ def test_user_email_account_relationship():
     print("🔍 Probando relación User <-> EmailAccount...")
     
     try:
-        with db_manager.get_db_session() as db:
-            # Crear usuario
-            user = User(email="relation@test.com", name="Usuario Relacion")
-            db.add(user)
-            db.flush()
+        # Crear usuario usando DatabaseManager
+        print("  📝 Creando usuario...")
+        user_result = db_manager.create_user(
+            email="relation@test.com", 
+            name="Usuario Relacion"
+        )
+        
+        if not user_result['success']:
+            print(f"  ❌ Error creando usuario: {user_result}")
+            return False
+        
+        user_id = user_result['user']['id']
+        
+        # Crear múltiples cuentas de email usando DatabaseManager
+        print("  📝 Creando múltiples cuentas...")
+        created_accounts = []
+        for i in range(3):
+            account_result = db_manager.add_email_account(
+                user_id=user_id,
+                email=f"cuenta{i}@example.com",
+                imap_config={'server': "imap.example.com", 'port': 993},
+                smtp_config={'server': "smtp.example.com", 'port': 587},
+                password=f"password{i}"
+            )
             
-            # Crear múltiples cuentas de email
-            accounts = []
-            for i in range(3):
-                account = EmailAccount(
-                    user_id=user.id,
-                    email=f"cuenta{i}@example.com",
-                    imap_server="imap.example.com",
-                    imap_port=993,
-                    smtp_server="smtp.example.com",
-                    smtp_port=587,
-                    encrypted_password=f"password{i}"
-                )
-                accounts.append(account)
-                db.add(account)
-            
-            db.flush()
-            
-            # Probar relación User -> EmailAccounts
-            print("  🔗 Probando User -> EmailAccounts...")
-            user_accounts = user.email_accounts
-            if len(user_accounts) == 3:
-                print(f"  ✅ Usuario tiene {len(user_accounts)} cuentas")
-                for account in user_accounts:
-                    print(f"     - {account.email}")
-            else:
-                print(f"  ❌ Usuario debería tener 3 cuentas, tiene {len(user_accounts)}")
+            if not account_result['success']:
+                print(f"  ❌ Error creando cuenta {i}: {account_result}")
                 return False
             
-            # Probar relación EmailAccount -> User
-            print("  🔗 Probando EmailAccount -> User...")
-            first_account = accounts[0]
-            if first_account.user and first_account.user.email == user.email:
-                print(f"  ✅ Cuenta pertenece a: {first_account.user.name}")
-            else:
-                print("  ❌ Relación EmailAccount -> User no funciona")
-                return False
-            
-            # Limpiar (cascade debería eliminar las cuentas automáticamente)
-            db.delete(user)
-            
+            created_accounts.append(account_result['account'])
+        
+        print(f"  ✅ {len(created_accounts)} cuentas creadas")
+        
+        # Probar relación User -> EmailAccounts usando DatabaseManager
+        print("  🔗 Probando User -> EmailAccounts...")
+        accounts_result = db_manager.get_user_email_accounts(user_id)
+        
+        if not accounts_result['success']:
+            print(f"  ❌ Error obteniendo cuentas: {accounts_result}")
+            return False
+        
+        user_accounts = accounts_result['accounts']
+        if len(user_accounts) == 3:
+            print(f"  ✅ Usuario tiene {len(user_accounts)} cuentas")
+            for account in user_accounts:
+                print(f"     - {account['email']}")
+        else:
+            print(f"  ❌ Usuario debería tener 3 cuentas, tiene {len(user_accounts)}")
+            return False
+        
+        # Probar relación EmailAccount -> User usando información de cuenta
+        print("  🔗 Probando EmailAccount -> User...")
+        first_account_id = created_accounts[0]['id']
+        account_info_result = db_manager.get_email_account_info(first_account_id)
+        
+        if not account_info_result['success']:
+            print(f"  ❌ Error obteniendo info de cuenta: {account_info_result}")
+            return False
+        
+        account_info = account_info_result['account_info']
+        if account_info['user_id'] == user_id:
+            print(f"  ✅ Cuenta pertenece al usuario: {user_id}")
+        else:
+            print(f"  ❌ Relación EmailAccount -> User no funciona")
+            return False
+        
+        # Verificar información del usuario desde la cuenta
+        user_info = db_manager.get_user_by_id(account_info['user_id'])
+        if user_info and user_info['email'] == "relation@test.com":
+            print(f"  ✅ Usuario encontrado desde cuenta: {user_info['name']}")
+        else:
+            print("  ❌ No se pudo obtener usuario desde cuenta")
+            return False
+        
+        # Limpiar - eliminar cuentas primero, luego usuario
+        print("  🗑️  Limpiando datos de prueba...")
+        for account in created_accounts:
+            delete_result = db_manager.delete_email_account(account['id'])
+            if not delete_result['success']:
+                print(f"  ⚠️  Error eliminando cuenta {account['id']}: {delete_result}")
+        
+        print("  ✅ Cuentas eliminadas")
+        
         print("✅ Relaciones funcionando correctamente")
         return True
         

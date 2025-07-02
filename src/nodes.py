@@ -102,18 +102,106 @@ class Nodes:
         return {"rag_queries": query_result.queries}
 
     def retrieve_from_rag(self, state: GraphState) -> GraphState:
-        """Retrieves information from internal knowledge based on RAG questions."""
-        print(Fore.YELLOW + "Retrieving information from internal knowledge...\n" + Style.RESET_ALL)
+        """Retrieves information from user's personalized Q&A using vector search."""
+        print(Fore.YELLOW + "Retrieving information from personalized Q&A...\n" + Style.RESET_ALL)
         final_answer = ""
         needs_human_attention = False
         
-        for query in state["rag_queries"]:
-            rag_result = self.agents.generate_rag_answer.invoke(query)
-            # Check if the result is "null" indicating human attention needed
-            if rag_result == "null":
-                needs_human_attention = True
-                break
-            final_answer += query + "\n" + rag_result + "\n\n"
+        # Get email_account_id from state
+        email_account_id = state.get("email_account_id")
+        if not email_account_id:
+            logger.warning("No email_account_id found in state, marking for human attention")
+            return {
+                "retrieved_documents": "",
+                "needs_human_attention": True
+            }
+        
+        try:
+            # Import database manager
+            from .database import db_manager
+            
+            # Get email account information to extract user_id
+            account_info_result = db_manager.get_email_account_info(email_account_id)
+            if not account_info_result['success']:
+                logger.error(f"Email account {email_account_id} not found")
+                return {
+                    "retrieved_documents": "",
+                    "needs_human_attention": True
+                }
+            
+            user_id = account_info_result['account_info']['user_id']
+            logger.info(f"Processing Q&A search for user {user_id} (email account {email_account_id})")
+            
+            # Check if user has Q&A configured by trying to search with a test query
+            # We'll use the first query to check if there are any Q&A entries
+            if not state.get("rag_queries"):
+                logger.warning("No RAG queries to process")
+                return {
+                    "retrieved_documents": "",
+                    "needs_human_attention": True
+                }
+            
+            # Process each RAG query using vector search
+            for query in state["rag_queries"]:
+                logger.debug(f"Processing query: {query[:100]}...")
+                
+                try:
+                    # Generate embedding for the query
+                    query_embedding = self.agents.embeddings.embed_query(
+                        query, 
+                        output_dimensionality=1536
+                    )
+                    
+                    # Search for similar questions using database manager method
+                    search_results = db_manager.search_similar_questions(
+                        user_id=user_id,
+                        query_embedding=query_embedding,
+                        threshold=0.7,  # Lower threshold for better recall
+                        limit=3
+                    )
+                    
+                    if search_results['success'] and search_results['results']:
+                        # Use the best matching result
+                        best_match = search_results['results'][0]
+                        similarity_score = best_match['matched_variant']['similarity_score']
+                        
+                        logger.info(f"Found match with similarity {similarity_score:.4f}")
+                        logger.debug(f"Matched question: {best_match['original_question'][:100]}...")
+                        
+                        if best_match['answer']['has_answer']:
+                            answer_text = best_match['answer']['text']
+                            instructions = best_match['answer']['instructions']
+                            
+                            # Format the answer with instructions if available
+                            formatted_answer = answer_text
+                            if instructions:
+                                formatted_answer += f"\n\nInstrucciones adicionales: {instructions}"
+                            
+                            final_answer += f"**Pregunta:** {query}\n**Respuesta:** {formatted_answer}\n\n"
+                            logger.debug(f"Added answer for query: {query[:50]}...")
+                        else:
+                            logger.warning(f"Question found but no answer configured, marking for human attention")
+                            needs_human_attention = True
+                            break
+                    else:
+                        logger.info(f"No similar questions found for query: {query[:50]}...")
+                        # If no similar questions found, mark for human attention
+                        needs_human_attention = True
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"Error processing query '{query[:50]}...': {e}")
+                    needs_human_attention = True
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error in retrieve_from_rag: {e}")
+            needs_human_attention = True
+        
+        if needs_human_attention:
+            logger.info("Marking email for human attention due to no matching Q&A or errors")
+        else:
+            logger.info(f"Successfully retrieved {len(state['rag_queries'])} Q&A responses")
         
         return {
             "retrieved_documents": final_answer,
@@ -289,3 +377,184 @@ class Nodes:
         # Just remove from our processing queue
         state["emails"].pop()
         return state
+
+    def evaluate_forward_rules(self, state: GraphState) -> GraphState:
+        """
+        Evalúa las reglas de reenvío para determinar si el email debe ser reenviado.
+        
+        - Obtiene las automatizaciones activas de la cuenta
+        - Ejecuta el agente de decisión de reenvío  
+        - Registra la decisión en el estado
+        """
+        print(Fore.YELLOW + "Evaluating forward rules...\n" + Style.RESET_ALL)
+        logger.info("Starting forward rules evaluation")
+        
+        try:
+            # TODO: Obtener email_account_id del estado (pendiente actualizar GraphState)
+            # Por ahora usamos un placeholder - esto se resolverá cuando se actualice state.py
+            email_account_id = state.get("email_account_id", 1)  # Placeholder
+            
+            # 1. Obtener las automatizaciones activas de la cuenta
+            from .database import db_manager
+            
+            logger.debug(f"Getting active automations for email_account_id: {email_account_id}")
+            automations_result = db_manager.get_active_automations(email_account_id)
+            
+            if not automations_result['success']:
+                logger.warning(f"Failed to get automations: {automations_result}")
+                return {"forward_decision": None, "forward_error": "Failed to get automations"}
+            
+            # Separar automatizaciones de reenvío y obtener temas Q&A
+            forward_automations = []
+            qa_topics = []
+            
+            for automation in automations_result['automations']:
+                if automation.get('type') == 'forward':
+                    forward_description = automation.get('forward_details', {}).get('description', '')
+                    forward_automations.append({
+                        'id': automation['id'],
+                        'description': forward_description
+                    })
+                elif automation.get('type') == 'response' and automation.get('question_details'):
+                    qa_topics.append(automation['question_details']['original_question'])
+            
+            # Preparar datos para el prompt
+            forward_rules = "\n".join([
+                f"ID {rule['id']}: {rule['description']}" 
+                for rule in forward_automations
+            ]) if forward_automations else "No forwarding rules configured."
+            
+            qa_topics_text = "\n".join([
+                f"- {topic}" 
+                for topic in qa_topics
+            ]) if qa_topics else "No Q&A topics configured."
+            
+            logger.debug(f"Found {len(forward_automations)} forward rules and {len(qa_topics)} Q&A topics")
+            
+            # 2. Ejecutar el agente de decisión de reenvío
+            email_content = state["current_email"].body
+            
+            forward_decision = self.agents.check_forward_rules.invoke({
+                "email_content": email_content,
+                "qa_topics": qa_topics_text,
+                "forward_rules": forward_rules
+            })
+            
+            logger.info(f"Forward decision: should_forward={forward_decision.should_forward}, "
+                       f"automation_id={forward_decision.forward_automation_id}, "
+                       f"confidence={forward_decision.confidence_score}")
+            
+            # 3. Registrar la decisión en el estado
+            return {
+                "forward_decision": {
+                    "should_forward": forward_decision.should_forward,
+                    "forward_automation_id": forward_decision.forward_automation_id,
+                    "confidence_score": forward_decision.confidence_score,
+                    "reason": forward_decision.reason
+                },
+                "forward_automations_available": len(forward_automations),
+                "qa_topics_available": len(qa_topics)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error evaluating forward rules: {str(e)}")
+            print(Fore.RED + f"Error evaluating forward rules: {str(e)}\n" + Style.RESET_ALL)
+            return {
+                "forward_decision": None,
+                "forward_error": str(e)
+            }
+
+    def forward_email(self, state: GraphState) -> GraphState:
+        """
+        Reenvía el email según la automatización de reenvío que hizo match.
+        
+        Obtiene la dirección de destino de la base de datos y reenvía el email
+        manteniendo la información del remitente original.
+        """
+        print(Fore.CYAN + "Forwarding email...\n" + Style.RESET_ALL)
+        logger.info("Starting email forwarding")
+        
+        try:
+            forward_decision = state.get("forward_decision")
+            if not forward_decision or not forward_decision.get("should_forward"):
+                logger.error("No forward decision found or should_forward is False")
+                return {"forward_error": "No valid forward decision"}
+            
+            automation_id = forward_decision.get("forward_automation_id")
+            if not automation_id:
+                logger.error("No automation ID found in forward decision")
+                return {"forward_error": "No automation ID in forward decision"}
+            
+            # Obtener detalles de la automatización de reenvío desde la base de datos
+            from .database import db_manager
+            
+            logger.debug(f"Getting forward automation details for ID: {automation_id}")
+            automation_details = db_manager.get_automation_details(automation_id)
+            
+            if not automation_details.get('success'):
+                logger.error(f"Failed to get automation details: {automation_details}")
+                return {"forward_error": "Failed to get automation details"}
+            
+            # Extraer información de reenvío
+            forward_details = automation_details.get('forward_details')
+            if not forward_details:
+                logger.error("No forward details found in automation")
+                return {"forward_error": "No forward details in automation"}
+            
+            forward_to_email = forward_details.get('forward_to_email')
+            forward_description = forward_details.get('description', 'Automated forwarding rule')
+            
+            if not forward_to_email:
+                logger.error("No forward_to_email found in automation details")
+                return {"forward_error": "No destination email configured"}
+            
+            logger.info(f"Forwarding email to: {forward_to_email}")
+            logger.debug(f"Forward rule description: {forward_description}")
+            
+            # Preparar información del email original para reenvío
+            current_email = state["current_email"]
+            original_email_dict = {
+                "id": current_email.id,
+                "threadId": current_email.threadId,
+                "messageId": current_email.messageId,
+                "references": current_email.references,
+                "sender": current_email.sender,
+                "subject": current_email.subject,
+                "body": current_email.body
+            }
+            
+            # Realizar el reenvío
+            logger.debug("Calling email_tools.forward_email")
+            result = self.email_tools.forward_email(
+                original_email=original_email_dict,
+                forward_to=forward_to_email,
+                automation_description=forward_description
+            )
+            
+            if result:
+                logger.info(f"✅ Email forwarded successfully to {forward_to_email}")
+                logger.info(f"   Original sender: {result.get('original_sender', 'Unknown')}")
+                logger.info(f"   Forward message ID: {result.get('id', 'Unknown')}")
+                print(Fore.GREEN + f"Email forwarded successfully to {forward_to_email}!" + Style.RESET_ALL)
+                
+                # Remover email del procesamiento (está procesado)
+                state["emails"].pop()
+                
+                return {
+                    "forward_result": result,
+                    "forward_completed": True,
+                    "retrieved_documents": "",  # Reset for next email
+                    "trials": 0  # Reset for next email
+                }
+            else:
+                logger.error(f"❌ Failed to forward email to {forward_to_email}")
+                print(Fore.RED + f"Failed to forward email to {forward_to_email}!" + Style.RESET_ALL)
+                return {"forward_error": "Email forwarding failed"}
+                
+        except Exception as e:
+            logger.error(f"Error in forward_email node: {str(e)}")
+            print(Fore.RED + f"Error forwarding email: {str(e)}\n" + Style.RESET_ALL)
+            return {
+                "forward_error": str(e),
+                "forward_completed": False
+            }

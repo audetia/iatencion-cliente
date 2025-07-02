@@ -892,6 +892,60 @@ class DatabaseManager:
             logger.error(f"❌ Error eliminando cuenta de email ID {account_id}: {e}")
             raise RuntimeError(f"Error en la base de datos: {str(e)}")
 
+    def get_email_account_info(self, account_id: int) -> dict:
+        """
+        Obtiene información básica de una cuenta de email (sin credenciales sensibles).
+        
+        Args:
+            account_id (int): ID de la cuenta
+            
+        Returns:
+            dict: Información básica de la cuenta incluyendo user_id
+            
+        Raises:
+            ValueError: Si el account_id es inválido
+            RuntimeError: Si hay error en la base de datos o la cuenta no existe
+        """
+        if not isinstance(account_id, int) or account_id <= 0:
+            raise ValueError("El ID de la cuenta debe ser un entero positivo")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                
+                # Usar el método del modelo para buscar la cuenta
+                account = EmailAccount.get_by_id(db, account_id)
+                
+                if not account:
+                    raise RuntimeError(f"Cuenta de email con ID {account_id} no encontrada")
+                
+                # Preparar información básica (sin credenciales)
+                account_info = {
+                    'account_id': account.id,
+                    'user_id': account.user_id,
+                    'email': account.email,
+                    'imap_server': account.imap_server,
+                    'imap_port': account.imap_port,
+                    'smtp_server': account.smtp_server,
+                    'smtp_port': account.smtp_port,
+                    'is_active': account.is_active
+                }
+                
+                logger.info(f"ℹ️  Información básica obtenida para cuenta ID {account_id} ({account.email})")
+                return {
+                    'success': True,
+                    'account_info': account_info,
+                    'message': 'Información de cuenta obtenida exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except RuntimeError:
+            raise  # Re-lanzar errores de cuenta no encontrada
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo información para cuenta ID {account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
     def get_email_account_credentials(self, account_id: int) -> dict:
         """
         Obtiene las credenciales desencriptadas de una cuenta de email.

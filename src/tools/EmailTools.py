@@ -505,6 +505,100 @@ class EmailToolsClass:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
+    def forward_email(self, original_email: Dict, forward_to: str, automation_description: str = None) -> Optional[Dict]:
+        """
+        Reenvía un email a la dirección especificada manteniendo información del remitente original.
+        
+        Args:
+            original_email: Dictionary containing original email information
+            forward_to: Destination email address for forwarding
+            automation_description: Description of the automation rule (for logging)
+            
+        Returns:
+            Dictionary containing forwarded message information or None if forwarding fails
+        """
+        try:
+            logger.debug("Starting email forwarding process")
+            logger.debug(f"Forwarding email with subject: {original_email.get('subject', 'No subject')}")
+            logger.debug(f"Original sender: {original_email.get('sender', 'Unknown sender')}")
+            logger.debug(f"Forward to: {forward_to}")
+            if automation_description:
+                logger.debug(f"Automation rule: {automation_description}")
+            
+            # Create forwarded message with complete original information
+            forward_subject = f"Fwd: {original_email.get('subject', 'No subject')}"
+            
+            # Format the forwarded email body with original headers
+            original_date = datetime.now().strftime('%d %b %Y, %H:%M')
+            forward_body = f"""
+            <div style="font-family: Arial, sans-serif; color: #333333;">
+                <p><strong>---------- Forwarded message ----------</strong></p>
+                <p><strong>From:</strong> {original_email.get('sender', 'Unknown')}</p>
+                <p><strong>Date:</strong> {original_date}</p>
+                <p><strong>Subject:</strong> {original_email.get('subject', 'No subject')}</p>
+                <p><strong>To:</strong> {self.email_user}</p>
+                <br>
+                
+                <div style="border-left: 3px solid #ccc; padding-left: 15px; margin: 10px 0;">
+                    {original_email.get('body', 'No content')}
+                </div>
+                
+                {f'<p style="margin-top: 20px; font-size: 12px; color: #666;"><em>Forwarded automatically by rule: {automation_description}</em></p>' if automation_description else ''}
+            </div>
+            """
+            
+            # Create the forwarded message
+            message = MIMEMultipart("alternative")
+            message["From"] = self.email_user
+            message["To"] = forward_to
+            message["Subject"] = forward_subject
+            message["Message-ID"] = f"<{uuid.uuid4()}@{self.smtp_server}>"
+            
+            # Add HTML content
+            html_part = MIMEText(forward_body, "html")
+            message.attach(html_part)
+            
+            logger.debug(f"Created forward message with headers: From={message.get('From')}, To={message.get('To')}, Subject={message.get('Subject')}")
+            
+            # Connect to SMTP server and send
+            logger.debug(f"Connecting to SMTP server {self.smtp_server}:{self.smtp_port}")
+            if self.smtp_port == 465:
+                logger.debug("Using SMTP_SSL connection")
+                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
+            else:
+                logger.debug("Using standard SMTP connection with STARTTLS")
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.starttls()
+                
+            logger.debug(f"Logging in to SMTP server as {self.email_user}")
+            server.login(self.email_user, self.email_pass)
+            
+            # Send the forwarded message
+            logger.debug(f"Forwarding email from {self.email_user} to {forward_to}")
+            result = server.send_message(message)
+            if result:
+                # If there are any failed recipients, they will be in the result dict
+                logger.error(f"Failed to forward to some recipients: {result}")
+            else:
+                logger.info(f"✅ Email forwarded successfully to {forward_to}")
+            
+            server.quit()
+            logger.debug("SMTP connection closed")
+            
+            return {
+                "id": message["Message-ID"],
+                "threadId": original_email.get("threadId", ""),
+                "forward_to": forward_to,
+                "original_sender": original_email.get('sender', 'Unknown')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error forwarding email: {str(e)}", exc_info=True)
+            # Provide detailed traceback for debugging
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+
     def _create_reply_message(self, email_info: Dict, reply_text: str, send: bool = False) -> MIMEMultipart:
         """Creates a reply message with proper headers and formatting."""
         message = self._create_html_email_message(
