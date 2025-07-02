@@ -175,6 +175,7 @@ class Nodes:
                         'answer': formatted_answer,
                         'similarity_score': similarity_score,
                         'matched_question': best_match['original_question'],
+                        'question_id': best_match['question_id'],  # Include question_id for tracking
                         'error': None,
                         'cache_hit': cache_hit
                     }
@@ -248,6 +249,7 @@ class Nodes:
                 }
             
             # Process each RAG query using dynamic RAG search
+            qa_usage_stats = []  # Track Q&A usage for statistics
             for query in state["rag_queries"]:
                 logger.debug(f"Processing query: {query[:100]}...")
                 
@@ -257,6 +259,15 @@ class Nodes:
                 if search_result['success']:
                     final_answer += f"**Pregunta:** {query}\n**Respuesta:** {search_result['answer']}\n\n"
                     logger.debug(f"Added answer for query: {query[:50]}...")
+                    
+                    # Track Q&A usage for statistics
+                    qa_usage_stats.append({
+                        'query': query,
+                        'question_id': search_result.get('question_id'),
+                        'similarity_score': search_result.get('similarity_score'),
+                        'matched_question': search_result.get('matched_question'),
+                        'cache_hit': search_result.get('cache_hit', False)
+                    })
                 else:
                     logger.info(f"No answer found for query: {query[:50]}... - {search_result['error']}")
                     needs_human_attention = True
@@ -283,7 +294,8 @@ class Nodes:
         
         return {
             "retrieved_documents": final_answer,
-            "needs_human_attention": needs_human_attention
+            "needs_human_attention": needs_human_attention,
+            "qa_usage_stats": qa_usage_stats  # Para tracking posterior
         }
 
     def write_draft_email(self, state: GraphState) -> GraphState:
@@ -429,11 +441,56 @@ class Nodes:
         if result:
             logger.info(f"✅ Email sent successfully to {sender} for thread: {result.get('threadId', 'unknown')}")
             print(Fore.GREEN + f"Email sent successfully to {sender}!" + Style.RESET_ALL)
+            
+            # Track Q&A usage in statistics
+            self._track_qa_usage(state)
         else:
             logger.error(f"❌ Failed to send email to {sender}")
             print(Fore.RED + f"Failed to send email to {sender}!" + Style.RESET_ALL)
         
         return {"retrieved_documents": "", "trials": 0}
+    
+    def _track_qa_usage(self, state: GraphState) -> None:
+        """
+        Helper method to track Q&A usage in statistics.
+        Logs each Q&A pair used in the email response.
+        """
+        try:
+            # Import database manager
+            from .database import db_manager
+            
+            qa_usage_stats = state.get("qa_usage_stats", [])
+            email_account_id = state.get("email_account_id")
+            
+            if not qa_usage_stats or not email_account_id:
+                logger.debug("No Q&A usage stats or email_account_id to track")
+                return
+            
+            # Track each Q&A used (usually just one, but could be multiple)
+            for qa_stat in qa_usage_stats:
+                question_id = qa_stat.get('question_id')
+                similarity_score = qa_stat.get('similarity_score')
+                
+                if question_id and similarity_score:
+                    # Log the email processing with Q&A tracking
+                    result = db_manager.log_email_processed(
+                        email_account_id=email_account_id,
+                        category="question",  # Since we used Q&A, it's a question
+                        action_taken="responded",
+                        tokens_used=0,  # Could be tracked if needed
+                        question_id=question_id,
+                        similarity_score=similarity_score
+                    )
+                    
+                    if result['success']:
+                        logger.info(f"📊 Tracked Q&A usage - Question ID: {question_id}, "
+                                   f"Similarity: {similarity_score:.4f}, Cache hit: {qa_stat.get('cache_hit', False)}")
+                    else:
+                        logger.warning(f"Failed to track Q&A usage: {result.get('error')}")
+                        
+        except Exception as e:
+            logger.error(f"Error tracking Q&A usage: {e}")
+            # Don't fail the email sending if tracking fails
     
     def skip_unrelated_email(self, state):
         """Skip unrelated email and remove from emails list."""

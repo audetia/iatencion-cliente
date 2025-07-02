@@ -85,9 +85,13 @@ class EmailProcessed(Base):
     forwarded_to = Column(String(255))
     category = Column(String(100), index=True)
     tokens_used = Column(Integer, default=0, nullable=False)
+    # Q&A tracking fields
+    question_id = Column(Integer, ForeignKey('questions.id'), nullable=True, index=True)
+    similarity_score = Column('similarity_score', None, nullable=True)  # Float with CHECK constraint
     
     # Relaciones
     email_account = relationship("EmailAccount", back_populates="email_processed")
+    question = relationship("Question", foreign_keys=[question_id])
     
     def __repr__(self):
         """
@@ -198,7 +202,10 @@ class EmailProcessed(Base):
             'category': self.category,
             'tokens_used': self.tokens_used,
             'action_type': self.action_type.value,
-            'has_action': self.has_action
+            'has_action': self.has_action,
+            # Q&A tracking
+            'question_id': self.question_id,
+            'similarity_score': float(self.similarity_score) if self.similarity_score else None
         }
     
     # =============================================================================
@@ -209,7 +216,8 @@ class EmailProcessed(Base):
     def create(cls, db_session, email_account_id: int, category: str = None,
                email_responded: bool = False, answer: str = None,
                email_forwarded: bool = False, forwarded_to: str = None,
-               tokens_used: int = 0) -> 'EmailProcessed':
+               tokens_used: int = 0, question_id: int = None, 
+               similarity_score: float = None) -> 'EmailProcessed':
         """
         Crea un nuevo registro de email procesado.
         
@@ -222,6 +230,8 @@ class EmailProcessed(Base):
             email_forwarded (bool): Si se reenvió
             forwarded_to (str): Email de destino del reenvío
             tokens_used (int): Tokens AI consumidos
+            question_id (int, optional): ID de la pregunta Q&A utilizada
+            similarity_score (float, optional): Score de similitud (0.0-1.0)
             
         Returns:
             EmailProcessed: Registro creado
@@ -233,7 +243,9 @@ class EmailProcessed(Base):
             answer=answer,
             email_forwarded=email_forwarded,
             forwarded_to=forwarded_to,
-            tokens_used=tokens_used
+            tokens_used=tokens_used,
+            question_id=question_id,
+            similarity_score=similarity_score
         )
         
         db_session.add(email_processed)

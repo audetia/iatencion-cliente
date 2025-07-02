@@ -1655,7 +1655,8 @@ class DatabaseManager:
     # =============================================================================
 
     def log_email_processed(self, email_account_id: int, category: str, action_taken: str, 
-                           tokens_used: int = 0, email_data: dict = None) -> dict:
+                           tokens_used: int = 0, email_data: dict = None, 
+                           question_id: int = None, similarity_score: float = None) -> dict:
         """
         Registra el procesamiento de un email en las estadísticas.
         
@@ -1665,6 +1666,8 @@ class DatabaseManager:
             action_taken (str): Acción realizada ('responded', 'forwarded', 'ignored', 'spam')
             tokens_used (int): Número de tokens utilizados en el procesamiento
             email_data (dict, optional): Datos adicionales del email procesado
+            question_id (int, optional): ID de la pregunta Q&A utilizada para responder
+            similarity_score (float, optional): Score de similitud vectorial (0.0-1.0)
             
         Returns:
             dict: Información del registro de estadísticas con éxito/error
@@ -1729,7 +1732,9 @@ class DatabaseManager:
                     answer=answer_text,
                     email_forwarded=email_forwarded,
                     forwarded_to=forwarded_to,
-                    tokens_used=tokens_used
+                    tokens_used=tokens_used,
+                    question_id=question_id,
+                    similarity_score=similarity_score
                 )
                 
                 # Actualizar estadísticas mensuales del usuario

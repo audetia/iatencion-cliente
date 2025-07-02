@@ -171,9 +171,9 @@
   - Busque en `question_variants` usando pgvector
   - Retorne las respuestas asociadas ordenadas por relevancia
 - [X] Modificar el prompt `GENERATE_RAG_ANSWER_PROMPT` para trabajar con respuestas personalizadas
-- [ ] Añadir logging detallado de qué preguntas se matchean
-- [ ] Crear método de caché para embeddings de queries frecuentes
-- [ ] Actualizar las estadísticas para registrar qué Q&A se utilizan
+- [X] Añadir logging detallado de qué preguntas se matchean
+- [X] Crear método de caché para embeddings de queries frecuentes
+- [X] Actualizar las estadísticas para registrar qué Q&A se utilizan
 
 ### Día 8: Testing e Integración del Flujo Modificado
 
