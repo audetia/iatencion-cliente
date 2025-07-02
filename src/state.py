@@ -32,3 +32,6 @@ class GraphState(TypedDict):
     # Forward result information
     forward_result: Optional[Dict[str, Any]]
     forward_completed: Optional[bool]
+    # Token usage tracking
+    session_tokens_used: Optional[int]
+    qa_usage_stats: Optional[List[Dict[str, Any]]]

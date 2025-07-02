@@ -71,14 +71,27 @@ class Nodes:
         """Categorizes the current email using the categorize_email agent."""
         print(Fore.YELLOW + "Checking email category...\n" + Style.RESET_ALL)
         
+        # Reset token tracking for new email processing session
+        self.agents.reset_token_tracking()
+        logger.debug("🔄 Starting new email processing session - token tracking reset")
+        
         # Get the last email
         current_email = state["emails"][-1]
-        result = self.agents.categorize_email.invoke({"email": current_email.body})
+        
+        # Use token tracking wrapper
+        result, tokens_used = self.agents.invoke_with_token_tracking(
+            self.agents.categorize_email, 
+            {"email": current_email.body}, 
+            "email_categorization"
+        )
+        
         print(Fore.MAGENTA + f"Email category: {result.category.value}" + Style.RESET_ALL)
+        logger.debug(f"Email categorization used {tokens_used} tokens")
         
         return {
             "email_category": result.category.value,
-            "current_email": current_email
+            "current_email": current_email,
+            "session_tokens_used": tokens_used
         }
 
     def route_email_based_on_category(self, state: GraphState) -> str:
@@ -98,9 +111,24 @@ class Nodes:
         """Constructs RAG queries based on the email content."""
         print(Fore.YELLOW + "Designing RAG query...\n" + Style.RESET_ALL)
         email_content = state["current_email"].body
-        query_result = self.agents.design_rag_queries.invoke({"email": email_content})
         
-        return {"rag_queries": query_result.queries}
+        # Use token tracking wrapper
+        query_result, tokens_used = self.agents.invoke_with_token_tracking(
+            self.agents.design_rag_queries,
+            {"email": email_content},
+            "rag_query_construction"
+        )
+        
+        logger.debug(f"RAG query construction used {tokens_used} tokens")
+        
+        # Accumulate tokens from previous operations
+        previous_tokens = state.get("session_tokens_used", 0)
+        total_tokens = previous_tokens + tokens_used
+        
+        return {
+            "rag_queries": query_result.queries,
+            "session_tokens_used": total_tokens
+        }
 
     def dynamic_rag_search(self, user_id: str, query: str) -> dict:
         """
@@ -312,13 +340,24 @@ class Nodes:
         # Get messages history for current email
         writer_messages = state.get('writer_messages', [])
         
-        # Write email
-        draft_result = self.agents.email_writer.invoke({
-            "email_information": inputs,
-            "history": writer_messages
-        })
+        # Write email with token tracking
+        draft_result, tokens_used = self.agents.invoke_with_token_tracking(
+            self.agents.email_writer,
+            {
+                "email_information": inputs,
+                "history": writer_messages
+            },
+            "email_writing"
+        )
+        
         email = draft_result.email
         trials = state.get('trials', 0) + 1
+        
+        logger.debug(f"Email writing used {tokens_used} tokens")
+        
+        # Accumulate tokens from previous operations
+        previous_tokens = state.get("session_tokens_used", 0)
+        total_tokens = previous_tokens + tokens_used
 
         # Append writer's draft to the message list
         writer_messages.append(f"**Draft {trials}:**\n{email}")
@@ -326,23 +365,37 @@ class Nodes:
         return {
             "generated_email": email, 
             "trials": trials,
-            "writer_messages": writer_messages
+            "writer_messages": writer_messages,
+            "session_tokens_used": total_tokens
         }
 
     def verify_generated_email(self, state: GraphState) -> GraphState:
         """Verifies the generated email using the proofreader agent."""
         print(Fore.YELLOW + "Verifying generated email...\n" + Style.RESET_ALL)
-        review = self.agents.email_proofreader.invoke({
-            "initial_email": state["current_email"].body,
-            "generated_email": state["generated_email"],
-        })
+        
+        # Use token tracking wrapper
+        review, tokens_used = self.agents.invoke_with_token_tracking(
+            self.agents.email_proofreader,
+            {
+                "initial_email": state["current_email"].body,
+                "generated_email": state["generated_email"],
+            },
+            "email_proofreading"
+        )
+        
+        logger.debug(f"Email proofreading used {tokens_used} tokens")
+        
+        # Accumulate tokens from previous operations
+        previous_tokens = state.get("session_tokens_used", 0)
+        total_tokens = previous_tokens + tokens_used
 
         writer_messages = state.get('writer_messages', [])
         writer_messages.append(f"**Proofreader Feedback:**\n{review.feedback}")
 
         return {
             "sendable": review.send,
-            "writer_messages": writer_messages
+            "writer_messages": writer_messages,
+            "session_tokens_used": total_tokens
         }
 
     def must_rewrite(self, state: GraphState) -> str:
@@ -472,19 +525,23 @@ class Nodes:
                 similarity_score = qa_stat.get('similarity_score')
                 
                 if question_id and similarity_score:
+                    # Get total tokens used in this session
+                    session_tokens = state.get("session_tokens_used", 0)
+                    
                     # Log the email processing with Q&A tracking
                     result = db_manager.log_email_processed(
                         email_account_id=email_account_id,
                         category="question",  # Since we used Q&A, it's a question
                         action_taken="responded",
-                        tokens_used=0,  # Could be tracked if needed
+                        tokens_used=int(session_tokens),  # Track actual tokens used
                         question_id=question_id,
                         similarity_score=similarity_score
                     )
                     
                     if result['success']:
                         logger.info(f"📊 Tracked Q&A usage - Question ID: {question_id}, "
-                                   f"Similarity: {similarity_score:.4f}, Cache hit: {qa_stat.get('cache_hit', False)}")
+                                   f"Similarity: {similarity_score:.4f}, Tokens: {session_tokens}, "
+                                   f"Cache hit: {qa_stat.get('cache_hit', False)}")
                     else:
                         logger.warning(f"Failed to track Q&A usage: {result.get('error')}")
                         
@@ -567,11 +624,22 @@ class Nodes:
             # 2. Ejecutar el agente de decisión de reenvío
             email_content = state["current_email"].body
             
-            forward_decision = self.agents.check_forward_rules.invoke({
-                "email_content": email_content,
-                "qa_topics": qa_topics_text,
-                "forward_rules": forward_rules
-            })
+            # 2. Ejecutar el agente de decisión de reenvío con token tracking
+            forward_decision, tokens_used = self.agents.invoke_with_token_tracking(
+                self.agents.check_forward_rules,
+                {
+                    "email_content": email_content,
+                    "qa_topics": qa_topics_text,
+                    "forward_rules": forward_rules
+                },
+                "forward_decision"
+            )
+            
+            logger.debug(f"Forward decision used {tokens_used} tokens")
+            
+            # Accumulate tokens from previous operations
+            previous_tokens = state.get("session_tokens_used", 0)
+            total_tokens = previous_tokens + tokens_used
             
             logger.info(f"Forward decision: should_forward={forward_decision.should_forward}, "
                        f"automation_id={forward_decision.forward_automation_id}, "
@@ -586,7 +654,8 @@ class Nodes:
                     "reason": forward_decision.reason
                 },
                 "forward_automations_available": len(forward_automations),
-                "qa_topics_available": len(qa_topics)
+                "qa_topics_available": len(qa_topics),
+                "session_tokens_used": total_tokens
             }
             
         except Exception as e:
