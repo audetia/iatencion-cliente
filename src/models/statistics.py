@@ -403,32 +403,215 @@ class EmailProcessed(Base):
     def count_by_user(cls, db_session, user_id: int,
                      date_range: Tuple[datetime, datetime] = None) -> int:
         """
-        Cuenta emails procesados de un usuario.
+        Cuenta el número total de emails procesados por un usuario.
         
         Args:
             db_session: Sesión de base de datos
             user_id (int): ID del usuario
-            date_range (tuple, optional): Rango de fechas
+            date_range (Tuple[datetime, datetime], optional): Rango de fechas (inicio, fin)
             
         Returns:
             int: Total de emails procesados
         """
+        from sqlalchemy import func
         from .email_account import EmailAccount
         
-        query = db_session.query(cls).join(EmailAccount).filter(
-            EmailAccount.user_id == user_id
-        )
+        query = db_session.query(func.count(cls.id)).join(
+            EmailAccount, cls.email_account_id == EmailAccount.id
+        ).filter(EmailAccount.user_id == user_id)
         
         if date_range:
             start_date, end_date = date_range
             query = query.filter(cls.processed_at.between(start_date, end_date))
         
-        return query.count()
+        return query.scalar() or 0
     
+    # =============================================================================
+    # MÉTODOS DE AGREGACIÓN SQL OPTIMIZADOS
+    # =============================================================================
+
+    @classmethod
+    def get_daily_statistics(cls, db_session, email_account_id: int, date_range: int = 30) -> List[Dict[str, Union[str, int]]]:
+        """
+        Obtiene estadísticas diarias agregadas usando SQL optimizado.
+        
+        Args:
+            db_session: Sesión de base de datos
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás
+            
+        Returns:
+            List[Dict]: Estadísticas diarias agregadas
+        """
+        from sqlalchemy import func, Date, case, desc
+        from datetime import datetime, timedelta
+        
+        # Calcular fecha de inicio
+        start_date = datetime.now() - timedelta(days=date_range)
+        
+        # Query SQL agregada optimizada
+        query = db_session.query(
+            func.date(cls.processed_at).label('date'),
+            func.count().label('total_emails'),
+            func.sum(case((cls.email_responded == True, 1), else_=0)).label('responded_count'),
+            func.sum(case((cls.email_forwarded == True, 1), else_=0)).label('forwarded_count'),
+            func.sum(case((cls.email_responded == False, cls.email_forwarded == False, 1), else_=0)).label('ignored_count'),
+            func.sum(case((cls.category == 'spam', 1), else_=0)).label('spam_count'),
+            func.sum(cls.tokens_used).label('total_tokens'),
+            func.string_agg(cls.category, ',').label('categories_raw')
+        ).filter(
+            cls.email_account_id == email_account_id,
+            cls.processed_at >= start_date
+        ).group_by(
+            func.date(cls.processed_at)
+        ).order_by(
+            desc(func.date(cls.processed_at))
+        )
+        
+        # Procesar resultados
+        results = []
+        for row in query.all():
+            # Procesar categorías únicas
+            categories = []
+            if row.categories_raw:
+                unique_categories = list(set(row.categories_raw.split(',')))
+                categories = [cat.strip() for cat in unique_categories if cat.strip()]
+            
+            results.append({
+                'date': row.date.isoformat() if row.date else None,
+                'total_emails': row.total_emails or 0,
+                'responded_count': row.responded_count or 0,
+                'forwarded_count': row.forwarded_count or 0,
+                'ignored_count': row.ignored_count or 0,
+                'spam_count': row.spam_count or 0,
+                'total_tokens': row.total_tokens or 0,
+                'categories': categories
+            })
+        
+        return results
+
+    @classmethod
+    def get_category_distribution(cls, db_session, email_account_id: int, date_range: int = 30) -> List[Dict[str, Union[str, int, float]]]:
+        """
+        Obtiene distribución por categorías usando SQL agregado optimizado.
+        
+        Args:
+            db_session: Sesión de base de datos
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás
+            
+        Returns:
+            List[Dict]: Distribución por categorías con estadísticas
+        """
+        from sqlalchemy import func, desc
+        from datetime import datetime, timedelta
+        
+        # Calcular fecha de inicio
+        start_date = datetime.now() - timedelta(days=date_range)
+        
+        # Query SQL agregada optimizada
+        query = db_session.query(
+            cls.category.label('category'),
+            func.count().label('count'),
+            func.avg(cls.tokens_used).label('avg_tokens'),
+            func.sum(cls.tokens_used).label('total_tokens')
+        ).filter(
+            cls.email_account_id == email_account_id,
+            cls.processed_at >= start_date,
+            cls.category.isnot(None)  # Excluir categorías nulas
+        ).group_by(
+            cls.category
+        ).order_by(
+            desc(func.count())
+        )
+        
+        # Procesar resultados
+        results = []
+        for row in query.all():
+            results.append({
+                'category': row.category or 'unknown',
+                'count': row.count or 0,
+                'avg_tokens': float(row.avg_tokens) if row.avg_tokens else 0.0,
+                'total_tokens': row.total_tokens or 0
+            })
+        
+        return results
+
+    @classmethod
+    def get_automated_email_count(cls, db_session, email_account_id: int, date_range: int = 30) -> Dict[str, int]:
+        """
+        Obtiene conteo de emails automatizados (respondidos + reenviados) usando SQL optimizado.
+        
+        Args:
+            db_session: Sesión de base de datos
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás
+            
+        Returns:
+            Dict[str, int]: Conteos de emails automatizados
+        """
+        from sqlalchemy import func, case
+        from datetime import datetime, timedelta
+        
+        # Calcular fecha de inicio
+        start_date = datetime.now() - timedelta(days=date_range)
+        
+        # Query SQL agregada optimizada
+        result = db_session.query(
+            func.sum(case((cls.email_responded == True, 1), else_=0)).label('responded_count'),
+            func.sum(case((cls.email_forwarded == True, 1), else_=0)).label('forwarded_count'),
+            func.count().label('total_processed')
+        ).filter(
+            cls.email_account_id == email_account_id,
+            cls.processed_at >= start_date
+        ).first()
+        
+        return {
+            'responded_count': result.responded_count or 0,
+            'forwarded_count': result.forwarded_count or 0,
+            'total_processed': result.total_processed or 0
+        }
+
+    @classmethod
+    def count_old_records(cls, db_session, cutoff_date: datetime) -> int:
+        """
+        Cuenta registros antiguos para limpieza usando SQL optimizado.
+        
+        Args:
+            db_session: Sesión de base de datos
+            cutoff_date (datetime): Fecha límite
+            
+        Returns:
+            int: Número de registros antiguos
+        """
+        from sqlalchemy import func
+        
+        return db_session.query(func.count(cls.id)).filter(
+            cls.processed_at < cutoff_date
+        ).scalar() or 0
+
+    @classmethod
+    def cleanup_old_records(cls, db_session, cutoff_date: datetime) -> int:
+        """
+        Elimina registros antiguos usando SQL optimizado.
+        
+        Args:
+            db_session: Sesión de base de datos
+            cutoff_date (datetime): Fecha límite
+            
+        Returns:
+            int: Número de registros eliminados
+        """
+        deleted_count = db_session.query(cls).filter(
+            cls.processed_at < cutoff_date
+        ).delete(synchronize_session=False)
+        
+        return deleted_count
+
     # =============================================================================
     # MÉTODOS DE INSTANCIA
     # =============================================================================
-    
+
     def update(self, db_session, **kwargs) -> None:
         """
         Actualiza los campos del registro.
@@ -502,6 +685,7 @@ class UserUsageMonthly(Base):
         get_by_user(): Obtiene registros de un usuario para los últimos N meses
         get_user_totals(): Obtiene totales agregados de un usuario
         cleanup_old_records(): Limpia registros antiguos más allá del período especificado
+        get_or_create_current(): Obtiene o crea el registro del mes actual (método faltante)
 
     """
     
@@ -526,7 +710,7 @@ class UserUsageMonthly(Base):
     
     # Relaciones
     user = relationship("User", back_populates="user_usage_monthly")
-    
+
     def __repr__(self):
         """
         Representación string del registro de uso mensual.
@@ -630,58 +814,165 @@ class UserUsageMonthly(Base):
             'is_current_month': self.is_current_month,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None
         }
-    
+
     # =============================================================================
-    # MÉTODOS DE CONSULTA (CLASS METHODS)
+    # MÉTODOS DE AGREGACIÓN SQL OPTIMIZADOS PARA UserUsageMonthly
     # =============================================================================
-    
+
     @classmethod
-    def create_or_update(cls, db_session, user_id: int, year: int, month: int,
-                        emails_processed: int = 0, emails_responded: int = 0,
-                        emails_forwarded: int = 0, tokens_used: int = 0) -> 'UserUsageMonthly':
+    def get_or_create_current(cls, db_session, user_id: int, year: int, month: int) -> 'UserUsageMonthly':
         """
-        Crea o actualiza un registro de uso mensual (UPSERT).
+        Obtiene o crea el registro de uso mensual actual usando UPSERT optimizado.
         
         Args:
             db_session: Sesión de base de datos
             user_id (int): ID del usuario
             year (int): Año
-            month (int): Mes (1-12)
+            month (int): Mes
+            
+        Returns:
+            UserUsageMonthly: Registro existente o recién creado
+        """
+        # Intentar obtener el registro existente
+        existing = db_session.query(cls).filter(
+            cls.user_id == user_id,
+            cls.year == year,
+            cls.month == month
+        ).first()
+        
+        if existing:
+            return existing
+        
+        # Crear nuevo registro si no existe
+        new_record = cls(
+            user_id=user_id,
+            year=year,
+            month=month,
+            emails_processed=0,
+            emails_responded=0,
+            emails_forwarded=0,
+            tokens_used=0
+        )
+        
+        db_session.add(new_record)
+        db_session.flush()
+        return new_record
+
+    def increment_tokens(self, tokens: int) -> None:
+        """
+        Incrementa el contador de tokens de forma optimizada.
+        
+        Args:
+            tokens (int): Número de tokens a incrementar
+        """
+        self.tokens_used += tokens
+        self.last_updated = datetime.utcnow()
+
+    def increment_usage(self, db_session, emails_processed: int = 0,
+                       emails_responded: int = 0, emails_forwarded: int = 0,
+                       tokens_used: int = 0) -> None:
+        """
+        Incrementa los contadores de uso.
+        
+        Args:
+            db_session: Sesión de base de datos
             emails_processed (int): Emails procesados a sumar
             emails_responded (int): Emails respondidos a sumar
             emails_forwarded (int): Emails reenviados a sumar
             tokens_used (int): Tokens a sumar
+        """
+        self.emails_processed += emails_processed
+        self.emails_responded += emails_responded
+        self.emails_forwarded += emails_forwarded
+        self.tokens_used += tokens_used
+        self.last_updated = datetime.utcnow()
+        db_session.flush()
+
+    def delete(self, db_session) -> None:
+        """
+        Elimina el registro de la base de datos.
+        
+        Args:
+            db_session: Sesión de base de datos
+        """
+        db_session.delete(self)
+        db_session.flush()
+
+    def get_comparison_with_previous_month(self, db_session) -> Dict[str, Union[int, float, str]]:
+        """
+        Compara las estadísticas con el mes anterior.
+        
+        Args:
+            db_session: Sesión de base de datos
             
         Returns:
-            UserUsageMonthly: Registro creado o actualizado
+            dict: Comparación con el mes anterior
         """
-        # Buscar registro existente
-        existing = cls.get_by_user_and_period(db_session, user_id, year, month)
+        from datetime import datetime, timedelta
         
-        if existing:
-            # Actualizar registro existente
-            existing.emails_processed += emails_processed
-            existing.emails_responded += emails_responded
-            existing.emails_forwarded += emails_forwarded
-            existing.tokens_used += tokens_used
-            existing.last_updated = datetime.utcnow()
-            db_session.flush()
-            return existing
+        # Calcular mes anterior
+        if self.month == 1:
+            prev_year = self.year - 1
+            prev_month = 12
         else:
-            # Crear nuevo registro
-            usage = cls(
-                user_id=user_id,
-                year=year,
-                month=month,
-                emails_processed=emails_processed,
-                emails_responded=emails_responded,
-                emails_forwarded=emails_forwarded,
-                tokens_used=tokens_used
-            )
-            db_session.add(usage)
-            db_session.flush()
-            return usage
-    
+            prev_year = self.year
+            prev_month = self.month - 1
+        
+        # Obtener registro del mes anterior
+        previous = self.get_by_user_and_period(db_session, self.user_id, prev_year, prev_month)
+        
+        def calc_percentage_change(current: int, previous: int) -> float:
+            """Calcula el cambio porcentual."""
+            if previous == 0:
+                return 100.0 if current > 0 else 0.0
+            return ((current - previous) / previous) * 100
+        
+        if not previous:
+            return {
+                'has_previous_month': False,
+                'previous_month': f"{prev_year}-{prev_month:02d}",
+                'message': 'No hay datos del mes anterior para comparar'
+            }
+        
+        return {
+            'has_previous_month': True,
+            'previous_month': f"{prev_year}-{prev_month:02d}",
+            'current_month': self.period_key,
+            'emails_processed': {
+                'current': self.emails_processed,
+                'previous': previous.emails_processed,
+                'change': self.emails_processed - previous.emails_processed,
+                'percentage_change': calc_percentage_change(self.emails_processed, previous.emails_processed)
+            },
+            'emails_responded': {
+                'current': self.emails_responded,
+                'previous': previous.emails_responded,
+                'change': self.emails_responded - previous.emails_responded,
+                'percentage_change': calc_percentage_change(self.emails_responded, previous.emails_responded)
+            },
+            'emails_forwarded': {
+                'current': self.emails_forwarded,
+                'previous': previous.emails_forwarded,
+                'change': self.emails_forwarded - previous.emails_forwarded,
+                'percentage_change': calc_percentage_change(self.emails_forwarded, previous.emails_forwarded)
+            },
+            'tokens_used': {
+                'current': self.tokens_used,
+                'previous': previous.tokens_used,
+                'change': self.tokens_used - previous.tokens_used,
+                'percentage_change': calc_percentage_change(self.tokens_used, previous.tokens_used)
+            },
+            'automation_rate': {
+                'current': self.automation_rate,
+                'previous': previous.automation_rate,
+                'change': self.automation_rate - previous.automation_rate
+            }
+        }
+
+    # =============================================================================
+    # MÉTODOS DE CONSULTA ADICIONALES
+    # =============================================================================
+
     @classmethod
     def get_by_id(cls, db_session, record_id: int) -> Optional['UserUsageMonthly']:
         """
@@ -730,110 +1021,11 @@ class UserUsageMonthly(Base):
         """
         now = datetime.now()
         return cls.get_by_user_and_period(db_session, user_id, now.year, now.month)
-    
-    @classmethod
-    def get_by_user(cls, db_session, user_id: int, 
-                   months_back: int = 12) -> List['UserUsageMonthly']:
-        """
-        Obtiene registros de un usuario para los últimos N meses.
-        
-        Args:
-            db_session: Sesión de base de datos
-            user_id (int): ID del usuario
-            months_back (int): Número de meses hacia atrás
-            
-        Returns:
-            List[UserUsageMonthly]: Lista de registros ordenados por fecha
-        """
-        # Calcular fecha límite
-        now = datetime.now()
-        start_date = now.replace(day=1) - timedelta(days=months_back * 31)
-        
-        return db_session.query(cls).filter(
-            cls.user_id == user_id,
-            cls.year >= start_date.year,
-            cls.month >= start_date.month if cls.year == start_date.year else True
-        ).order_by(cls.year.desc(), cls.month.desc()).all()
-    
-    @classmethod
-    def get_user_totals(cls, db_session, user_id: int, 
-                       months_back: int = 12) -> Dict[str, int]:
-        """
-        Obtiene totales agregados de un usuario.
-        
-        Args:
-            db_session: Sesión de base de datos
-            user_id (int): ID del usuario
-            months_back (int): Número de meses hacia atrás
-            
-        Returns:
-            dict: Totales agregados
-        """
-        from sqlalchemy import func
-        
-        # Calcular fecha límite
-        now = datetime.now()
-        start_date = now.replace(day=1) - timedelta(days=months_back * 31)
-        
-        result = db_session.query(
-            func.sum(cls.emails_processed).label('total_processed'),
-            func.sum(cls.emails_responded).label('total_responded'),
-            func.sum(cls.emails_forwarded).label('total_forwarded'),
-            func.sum(cls.tokens_used).label('total_tokens')
-        ).filter(
-            cls.user_id == user_id,
-            cls.year >= start_date.year,
-            cls.month >= start_date.month if cls.year == start_date.year else True
-        ).first()
-        
-        total_processed = result.total_processed or 0
-        total_responded = result.total_responded or 0
-        total_forwarded = result.total_forwarded or 0
-        total_tokens = result.total_tokens or 0
-        
-        total_actions = total_responded + total_forwarded
-        automation_rate = (total_actions / max(total_processed, 1)) * 100
-        
-        return {
-            'total_processed': total_processed,
-            'total_responded': total_responded,
-            'total_forwarded': total_forwarded,
-            'total_actions': total_actions,
-            'total_tokens': total_tokens,
-            'automation_rate': round(automation_rate, 2),
-            'time_saved_minutes': total_processed * 5,
-            'time_saved_hours': round((total_processed * 5) / 60, 2),
-            'months_included': months_back
-        }
-    
-    @classmethod
-    def cleanup_old_records(cls, db_session, months_to_keep: int = 24) -> int:
-        """
-        Limpia registros antiguos más allá del período especificado.
-        
-        Args:
-            db_session: Sesión de base de datos
-            months_to_keep (int): Meses a mantener
-            
-        Returns:
-            int: Número de registros eliminados
-        """
-        # Calcular fecha límite
-        now = datetime.now()
-        cutoff_date = now.replace(day=1) - timedelta(days=months_to_keep * 31)
-        
-        deleted_count = db_session.query(cls).filter(
-            cls.year < cutoff_date.year,
-            cls.month < cutoff_date.month if cls.year == cutoff_date.year else True
-        ).delete()
-        
-        db_session.flush()
-        return deleted_count
-    
+
     # =============================================================================
     # MÉTODOS DE INSTANCIA
     # =============================================================================
-    
+
     def update(self, db_session, **kwargs) -> None:
         """
         Actualiza los campos del registro.
@@ -853,7 +1045,7 @@ class UserUsageMonthly(Base):
         
         self.last_updated = datetime.utcnow()
         db_session.flush()
-    
+
     def increment_usage(self, db_session, emails_processed: int = 0,
                        emails_responded: int = 0, emails_forwarded: int = 0,
                        tokens_used: int = 0) -> None:
@@ -873,78 +1065,3 @@ class UserUsageMonthly(Base):
         self.tokens_used += tokens_used
         self.last_updated = datetime.utcnow()
         db_session.flush()
-    
-    def delete(self, db_session) -> None:
-        """
-        Elimina el registro de la base de datos.
-        
-        Args:
-            db_session: Sesión de base de datos
-        """
-        db_session.delete(self)
-        db_session.flush()
-    
-    def get_comparison_with_previous_month(self, db_session) -> Dict[str, Union[int, float, str]]:
-        """
-        Compara las estadísticas con el mes anterior.
-        
-        Args:
-            db_session: Sesión de base de datos
-            
-        Returns:
-            dict: Comparación con el mes anterior
-        """
-        # Calcular mes anterior
-        if self.month == 1:
-            prev_year, prev_month = self.year - 1, 12
-        else:
-            prev_year, prev_month = self.year, self.month - 1
-        
-        # Obtener registro del mes anterior
-        previous = self.get_by_user_and_period(db_session, self.user_id, prev_year, prev_month)
-        
-        if not previous:
-            return {
-                'has_previous': False,
-                'message': 'No hay datos del mes anterior'
-            }
-        
-        # Calcular diferencias
-        diff_processed = self.emails_processed - previous.emails_processed
-        diff_responded = self.emails_responded - previous.emails_responded
-        diff_forwarded = self.emails_forwarded - previous.emails_forwarded
-        diff_tokens = self.tokens_used - previous.tokens_used
-        diff_automation_rate = self.automation_rate - previous.automation_rate
-        
-        # Calcular porcentajes de cambio
-        def calc_percentage_change(current: int, previous: int) -> float:
-            if previous == 0:
-                return 100.0 if current > 0 else 0.0
-            return ((current - previous) / previous) * 100
-        
-        return {
-            'has_previous': True,
-            'previous_period': previous.period_key,
-            'changes': {
-                'emails_processed': {
-                    'absolute': diff_processed,
-                    'percentage': calc_percentage_change(self.emails_processed, previous.emails_processed)
-                },
-                'emails_responded': {
-                    'absolute': diff_responded,
-                    'percentage': calc_percentage_change(self.emails_responded, previous.emails_responded)
-                },
-                'emails_forwarded': {
-                    'absolute': diff_forwarded,
-                    'percentage': calc_percentage_change(self.emails_forwarded, previous.emails_forwarded)
-                },
-                'tokens_used': {
-                    'absolute': diff_tokens,
-                    'percentage': calc_percentage_change(self.tokens_used, previous.tokens_used)
-                },
-                'automation_rate': {
-                    'absolute': round(diff_automation_rate, 2),
-                    'percentage': 0  # La tasa ya es un porcentaje
-                }
-            }
-        }

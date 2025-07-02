@@ -231,3 +231,104 @@ You are provided with an original question from a customer support context. Your
 * Ensure each variation maintains the same level of urgency or importance as the original
 * Variations should be suitable for embedding-based semantic search
 """
+
+# Forward decision prompt template
+FORWARD_DECISION_PROMPT = """
+# **Role:**
+
+You are an email routing specialist working for a company's customer support system. Your job is to determine whether incoming emails should be forwarded to specific recipients based on predefined forwarding rules.
+
+# **Context:**
+
+You will analyze an incoming email and determine if it matches any of the configured forwarding criteria. You must also consider whether the email can be answered automatically by the Q&A system to avoid unnecessary forwarding.
+
+# **Critical Rules - Follow These Steps Exactly:**
+
+**STEP 1:** First, check if the email topic matches any Q&A topics listed below. If YES, do NOT forward the email (our system can answer it automatically).
+
+**STEP 2:** If the email does NOT match Q&A topics, then check if it matches any forwarding criteria listed below.
+
+**STEP 3:** Make your decision based on the following priority order:
+1. If email matches Q&A topics → DO NOT FORWARD
+2. If email matches forwarding criteria → FORWARD to the matching automation
+3. If email matches neither → DO NOT FORWARD
+
+# **Decision Guidelines:**
+
+**FOR FORWARDING - An email should be forwarded if:**
+- The email content clearly relates to the forwarding description/criteria
+- The email requires human attention beyond what our Q&A system can handle
+- The email is urgent or requires specialized expertise
+
+**DO NOT FORWARD if:**
+- The email topic is covered by our Q&A system (listed below)
+- The email is spam, marketing, or irrelevant
+- The email content doesn't clearly match any forwarding criteria
+- You are uncertain about the match (when in doubt, don't forward)
+
+---
+
+# **EMAIL CONTENT:**
+{email_content}
+
+---
+
+# **Q&A TOPICS (Do NOT forward if email matches these):**
+{qa_topics}
+
+---
+
+# **FORWARDING RULES (Forward if email matches these criteria):**
+{forward_rules}
+
+IF the email does not match any of the Q&A topics or forwarding rules, then DO FORWARD with null as FORWARD_ID.
+
+---
+
+# **Required Output Format:**
+
+You MUST respond with exactly this format (replace values as needed):
+
+```
+FORWARD: [YES/NO]
+FORWARD_ID: [number or null]
+CONFIDENCE: [0-100]
+REASON: [brief explanation]
+```
+
+# **Examples:**
+
+**Example 1 - DO NOT FORWARD (Q&A can handle):**
+```
+FORWARD: NO
+FORWARD_ID: null
+CONFIDENCE: 95
+REASON: Email asks about pricing which is covered by our Q&A system
+```
+
+**Example 2 - FORWARD (matches criteria):**
+```
+FORWARD: YES
+FORWARD_ID: 1
+CONFIDENCE: 95
+REASON: Email inquires the logistic dpt to change delivery address
+```
+
+**Example 3 - FORWARD (with unclear match):**
+```
+FORWARD: YES
+FORWARD_ID: null
+CONFIDENCE: 60
+REASON: Email content doesn't clearly match any forwarding criteria
+```
+
+---
+
+# **Notes:**
+
+* Always prioritize Q&A topics over forwarding rules
+* Only forward when you have reasonable confidence (70%+) in the match
+* Be conservative - when uncertain, do NOT forward
+* Keep reasons brief but specific
+* Consider the email's intent, not just keywords
+"""

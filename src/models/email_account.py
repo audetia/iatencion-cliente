@@ -54,15 +54,15 @@ class EmailAccount(Base, TimestampMixin):
     smtp_port = Column(Integer, nullable=False)
     encrypted_password = Column(String(500), nullable=False)  # Espacio extra para encriptación
     
-    # Campos OAuth2
-    oauth2_token = Column(String(1000))
-    oauth2_refresh_token = Column(String(1000))
-    auth_type = Column(String(20), default='password')  # 'password' o 'oauth2'
+    # Campos OAuth2 - COMENTADOS PARA MVP (solo usaremos IMAP básico)
+    # oauth2_token = Column(String(1000))
+    # oauth2_refresh_token = Column(String(1000))
+    # auth_type = Column(String(20), default='password')  # 'password' o 'oauth2'
     
     # Campos de salud y monitoreo
     is_active = Column(Boolean, default=True, nullable=False)
-    last_health_check = Column('last_health_check', None)
-    health_status = Column(String(20), default='unknown')  # 'healthy', 'warning', 'error', 'unknown'
+    # last_health_check = Column('last_health_check', None)  # COMENTADO - columna no existe en BD
+    # health_status = Column(String(20), default='unknown')  # COMENTADO - columna no existe en BD
 
     # Relaciones
     user = relationship("User", back_populates="email_accounts")
@@ -126,15 +126,15 @@ class EmailAccount(Base, TimestampMixin):
         Returns:
             str: Email con indicador de estado
         """
-        health_icon = {
-            'healthy': '✅',
-            'warning': '⚠️',
-            'error': '❌',
-            'unknown': '❔'
-        }.get(self.health_status, '❔')
+        # health_icon = {
+        #     'healthy': '✅',
+        #     'warning': '⚠️',
+        #     'error': '❌',
+        #     'unknown': '❔'
+        # }.get(self.health_status, '❔')
         
         active_icon = '✓' if self.is_active else '✗'
-        return f"{self.email} {health_icon}{active_icon}"
+        return f"{self.email} {active_icon}"  # Simplificado para MVP
     
     @property
     def is_oauth2(self) -> bool:
@@ -144,7 +144,8 @@ class EmailAccount(Base, TimestampMixin):
         Returns:
             bool: True si usa OAuth2
         """
-        return self.auth_type == 'oauth2'
+        # return self.auth_type == 'oauth2'  # COMENTADO - auth_type no existe en MVP
+        return False  # MVP solo usa IMAP básico
     
     def activate(self) -> None:
         """
@@ -194,93 +195,95 @@ class EmailAccount(Base, TimestampMixin):
             'imap_port': self.imap_port,
             'smtp_server': self.smtp_server,
             'smtp_port': self.smtp_port,
-            'auth_type': self.auth_type,
-            'oauth2_token': self.oauth2_token if self.is_oauth2 else None
+            # 'auth_type': self.auth_type,  # COMENTADO - no existe en MVP
+            # 'oauth2_token': self.oauth2_token if self.is_oauth2 else None  # COMENTADO - no existe en MVP
         }
         
         # Usar EmailTools para realizar el test
         return EmailToolsClass.test_email_account_connection(account_config, decrypted_password)
     
-    def health_check(self, db_session, decrypted_password: str = None) -> Dict[str, Union[bool, str, datetime]]:
-        """
-        Realiza verificación de salud de la conexión y actualiza el estado.
-        
-        NOTA: Para monitoreo automático, usar EmailMonitoringService.
-        Este método está pensado para verificaciones manuales con credenciales.
-        
-        Args:
-            db_session: Sesión de base de datos
-            decrypted_password (str, optional): Contraseña desencriptada
-            
-        Returns:
-            dict: Resultado del health check
-        """
-        if not decrypted_password:
-            return {
-                'is_healthy': False,
-                'status': 'error',
-                'message': 'Contraseña requerida para health check con conexión real',
-                'last_check': self.last_health_check
-            }
-        
-        try:
-            # Usar el método que delega a EmailTools
-            connection_test = self.test_connection_detailed(decrypted_password)
-            
-            # Actualizar estado basado en el resultado
-            if connection_test['overall_status'] == 'success':
-                self.health_status = 'healthy'
-                self.is_active = True
-                is_healthy = True
-                message = 'Conexión saludable'
-            elif connection_test['overall_status'] == 'partial':
-                self.health_status = 'warning'
-                is_healthy = False
-                message = 'Conexión parcial - revisar configuración'
-            else:
-                self.health_status = 'error'
-                self.is_active = False
-                is_healthy = False
-                message = 'Error de conexión - cuenta desactivada'
-            
-            # Actualizar timestamp
-            self.last_health_check = datetime.now()
-            db_session.flush()
-            
-            return {
-                'is_healthy': is_healthy,
-                'status': self.health_status,
-                'message': message,
-                'last_check': self.last_health_check,
-                'connection_details': connection_test
-            }
-            
-        except Exception as e:
-            self.health_status = 'error'
-            self.last_health_check = datetime.now()
-            db_session.flush()
-            
-            return {
-                'is_healthy': False,
-                'status': 'error',
-                'message': f'Error en health check: {str(e)}',
-                'last_check': self.last_health_check
-            }
+    # MÉTODO COMENTADO PARA MVP - usa campos no existentes en BD
+    # def health_check(self, db_session, decrypted_password: str = None) -> Dict[str, Union[bool, str, datetime]]:
+    #     """
+    #     Realiza verificación de salud de la conexión y actualiza el estado.
+    #     
+    #     NOTA: Para monitoreo automático, usar EmailMonitoringService.
+    #     Este método está pensado para verificaciones manuales con credenciales.
+    #     
+    #     Args:
+    #         db_session: Sesión de base de datos
+    #         decrypted_password (str, optional): Contraseña desencriptada
+    #         
+    #     Returns:
+    #         dict: Resultado del health check
+    #     """
+    #     if not decrypted_password:
+    #         return {
+    #             'is_healthy': False,
+    #             'status': 'error',
+    #             'message': 'Contraseña requerida para health check con conexión real',
+    #             'last_check': self.last_health_check
+    #         }
+    #     
+    #     try:
+    #         # Usar el método que delega a EmailTools
+    #         connection_test = self.test_connection_detailed(decrypted_password)
+    #         
+    #         # Actualizar estado basado en el resultado
+    #         if connection_test['overall_status'] == 'success':
+    #             self.health_status = 'healthy'
+    #             self.is_active = True
+    #             is_healthy = True
+    #             message = 'Conexión saludable'
+    #         elif connection_test['overall_status'] == 'partial':
+    #             self.health_status = 'warning'
+    #             is_healthy = False
+    #             message = 'Conexión parcial - revisar configuración'
+    #         else:
+    #             self.health_status = 'error'
+    #             self.is_active = False
+    #             is_healthy = False
+    #             message = 'Error de conexión - cuenta desactivada'
+    #         
+    #         # Actualizar timestamp
+    #         self.last_health_check = datetime.now()
+    #         db_session.flush()
+    #         
+    #         return {
+    #             'is_healthy': is_healthy,
+    #             'status': self.health_status,
+    #             'message': message,
+    #             'last_check': self.last_health_check,
+    #             'connection_details': connection_test
+    #         }
+    #         
+    #     except Exception as e:
+    #         self.health_status = 'error'
+    #         self.last_health_check = datetime.now()
+    #         db_session.flush()
+    #         
+    #         return {
+    #             'is_healthy': False,
+    #             'status': 'error',
+    #             'message': f'Error en health check: {str(e)}',
+    #             'last_check': self.last_health_check
+    #         }
     
-    def refresh_oauth2_token(self) -> bool:
-        """
-        Renueva el token OAuth2 usando el refresh token.
-        
-        Returns:
-            bool: True si el token se renovó exitosamente
-        """
-        if not self.is_oauth2 or not self.oauth2_refresh_token:
-            return False
-        
-        # TODO: Implementar renovación de tokens OAuth2
-        # Esto dependerá del proveedor (Gmail, Outlook, etc.)
-        # Por ahora, retornar False como placeholder
-        return False
+    # MÉTODO COMENTADO PARA MVP - usa OAuth2 que no está en el MVP
+    # def refresh_oauth2_token(self) -> bool:
+    #     """
+    #     Renueva el token OAuth2 usando el refresh token.
+    #     
+    #     Returns:
+    #         bool: True si el token se renovó exitosamente
+    #     """
+    #     if not self.is_oauth2 or not self.oauth2_refresh_token:
+    #         return False
+    #     
+    #     # TODO: Implementar renovación de tokens OAuth2
+    #     # Esto dependerá del proveedor (Gmail, Outlook, etc.)
+    #     # Por ahora, retornar False como placeholder
+    #     return False
     
     def to_dict(self, include_password: bool = False, include_tokens: bool = False) -> dict:
         """
@@ -301,10 +304,10 @@ class EmailAccount(Base, TimestampMixin):
             'imap_port': self.imap_port,
             'smtp_server': self.smtp_server,
             'smtp_port': self.smtp_port,
-            'auth_type': self.auth_type,
+            # 'auth_type': self.auth_type,  # COMENTADO - no existe en MVP
             'is_active': self.is_active,
-            'health_status': self.health_status,
-            'last_health_check': self.last_health_check.isoformat() if self.last_health_check else None,
+            # 'health_status': self.health_status,  # COMENTADO - no existe en MVP
+            # 'last_health_check': self.last_health_check.isoformat() if self.last_health_check else None,  # COMENTADO - no existe en MVP
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -312,9 +315,9 @@ class EmailAccount(Base, TimestampMixin):
         if include_password:
             data['encrypted_password'] = self.encrypted_password
         
-        if include_tokens and self.is_oauth2:
-            data['oauth2_token'] = self.oauth2_token
-            data['oauth2_refresh_token'] = self.oauth2_refresh_token
+        # if include_tokens and self.is_oauth2:  # COMENTADO - OAuth2 no está en MVP
+        #     data['oauth2_token'] = self.oauth2_token
+        #     data['oauth2_refresh_token'] = self.oauth2_refresh_token
             
         return data
     
@@ -337,9 +340,9 @@ class EmailAccount(Base, TimestampMixin):
             smtp_server=data.get('smtp_server'),
             smtp_port=data.get('smtp_port'),
             encrypted_password=data.get('encrypted_password'),
-            oauth2_token=data.get('oauth2_token'),
-            oauth2_refresh_token=data.get('oauth2_refresh_token'),
-            auth_type=data.get('auth_type', 'password'),
+            # oauth2_token=data.get('oauth2_token'),  # COMENTADO - no existe en MVP
+            # oauth2_refresh_token=data.get('oauth2_refresh_token'),  # COMENTADO - no existe en MVP
+            # auth_type=data.get('auth_type', 'password'),  # COMENTADO - no existe en MVP
             is_active=data.get('is_active', True)
         )
     
@@ -492,11 +495,11 @@ class EmailAccount(Base, TimestampMixin):
             'imap_server': self.imap_server,
             'imap_port': self.imap_port,
             'password': decrypted_password,
-            'auth_type': self.auth_type,
-            'oauth2_token': self.oauth2_token if self.is_oauth2 else None,
+            # 'auth_type': self.auth_type,  # COMENTADO - no existe en MVP
+            # 'oauth2_token': self.oauth2_token if self.is_oauth2 else None,  # COMENTADO - no existe en MVP
             'is_active': self.is_active,
-            'health_status': self.health_status,
-            'monitoring_enabled': self.is_active and self.health_status in ['healthy', 'unknown']
+            # 'health_status': self.health_status,  # COMENTADO - no existe en MVP
+            'monitoring_enabled': self.is_active  # Simplificado para MVP
         }
     
     # =============================================================================
@@ -519,7 +522,7 @@ class EmailAccount(Base, TimestampMixin):
             smtp_server (str): Servidor SMTP
             smtp_port (int): Puerto SMTP
             encrypted_password (str): Contraseña encriptada
-            auth_type (str): Tipo de autenticación
+            auth_type (str): Tipo de autenticación (IGNORADO en MVP)
             
         Returns:
             EmailAccount: Cuenta creada
@@ -540,7 +543,7 @@ class EmailAccount(Base, TimestampMixin):
             smtp_server=smtp_server,
             smtp_port=smtp_port,
             encrypted_password=encrypted_password,
-            auth_type=auth_type
+            # auth_type=auth_type  # COMENTADO - no existe en MVP
         )
         
         db_session.add(account)
@@ -623,24 +626,25 @@ class EmailAccount(Base, TimestampMixin):
         """
         return db_session.query(cls).filter(cls.is_active == True).all()
     
-    @classmethod
-    def get_accounts_needing_health_check(cls, db_session, hours_threshold: int = 24) -> list['EmailAccount']:
-        """
-        Obtiene cuentas que necesitan verificación de salud.
-        
-        Args:
-            db_session: Sesión de base de datos
-            hours_threshold (int): Horas desde último check
-            
-        Returns:
-            list[EmailAccount]: Lista de cuentas que necesitan verificación
-        """
-        threshold_time = datetime.now() - timedelta(hours=hours_threshold)
-        
-        return db_session.query(cls).filter(
-            cls.is_active == True,
-            (cls.last_health_check.is_(None) | (cls.last_health_check < threshold_time))
-        ).all()
+    # MÉTODO COMENTADO PARA MVP - usa last_health_check que no existe en BD
+    # @classmethod
+    # def get_accounts_needing_health_check(cls, db_session, hours_threshold: int = 24) -> list['EmailAccount']:
+    #     """
+    #     Obtiene cuentas que necesitan verificación de salud.
+    #     
+    #     Args:
+    #         db_session: Sesión de base de datos
+    #         hours_threshold (int): Horas desde último check
+    #         
+    #     Returns:
+    #         list[EmailAccount]: Lista de cuentas que necesitan verificación
+    #     """
+    #     threshold_time = datetime.now() - timedelta(hours=hours_threshold)
+    #     
+    #     return db_session.query(cls).filter(
+    #         cls.is_active == True,
+    #         (cls.last_health_check.is_(None) | (cls.last_health_check < threshold_time))
+    #     ).all()
     
     @classmethod
     def count_by_user(cls, db_session, user_id: int) -> int:
@@ -688,7 +692,7 @@ class EmailAccount(Base, TimestampMixin):
         allowed_fields = {
             'email', 'imap_server', 'imap_port', 'smtp_server', 
             'smtp_port', 'encrypted_password', 'is_active',
-            'oauth2_token', 'oauth2_refresh_token', 'auth_type'
+            # 'oauth2_token', 'oauth2_refresh_token', 'auth_type'  # COMENTADO - no existe en MVP
         }
         
         for field, value in kwargs.items():
@@ -716,9 +720,9 @@ class EmailAccount(Base, TimestampMixin):
             new_encrypted_password (str): Nueva contraseña encriptada
         """
         self.encrypted_password = new_encrypted_password
-        # Reset health status para forzar nueva verificación
-        self.health_status = 'unknown'
-        self.last_health_check = None
+        # Reset health status para forzar nueva verificación - COMENTADO para MVP
+        # self.health_status = 'unknown'
+        # self.last_health_check = None
         db_session.flush()
     
     def get_config_for_connection(self) -> dict:
@@ -740,8 +744,8 @@ class EmailAccount(Base, TimestampMixin):
                 'port': self.smtp_port,
                 'email': self.email
             },
-            'auth_type': self.auth_type,
-            'is_oauth2': self.is_oauth2
+            # 'auth_type': self.auth_type,  # COMENTADO - no existe en MVP
+            # 'is_oauth2': self.is_oauth2  # COMENTADO - no existe en MVP
             # Nota: No incluimos credenciales por seguridad
             # Debe obtenerse por separado cuando sea necesaria
         }
@@ -757,12 +761,12 @@ class EmailAccount(Base, TimestampMixin):
         # Actualizar estado basado en resultado
         if connection_successful:
             self.activate()
-            self.health_status = 'healthy'
+            # self.health_status = 'healthy'  # COMENTADO - no existe en MVP
         else:
             self.deactivate()
-            self.health_status = 'error'
+            # self.health_status = 'error'  # COMENTADO - no existe en MVP
         
-        self.last_health_check = datetime.now()
+        # self.last_health_check = datetime.now()  # COMENTADO - no existe en MVP
         db_session.flush()
     
     def get_user_info(self, db_session) -> dict:

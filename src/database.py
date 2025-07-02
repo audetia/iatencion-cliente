@@ -940,16 +940,16 @@ class DatabaseManager:
                         'port': account.smtp_port,
                         'email': account.email
                     },
-                    'auth_type': account.auth_type,
-                    'is_oauth2': account.is_oauth2,
+                    # 'auth_type': account.auth_type,  # COMENTADO - no existe en MVP
+                    # 'is_oauth2': account.is_oauth2,  # COMENTADO - no existe en MVP
                     'is_active': account.is_active,
-                    'health_status': account.health_status
+                    # 'health_status': account.health_status  # COMENTADO - no existe en MVP
                 }
                 
-                # Añadir tokens OAuth2 si aplica
-                if account.is_oauth2:
-                    credentials['oauth2_token'] = account.oauth2_token
-                    credentials['oauth2_refresh_token'] = account.oauth2_refresh_token
+                # Añadir tokens OAuth2 si aplica - COMENTADO para MVP
+                # if account.is_oauth2:
+                #     credentials['oauth2_token'] = account.oauth2_token
+                #     credentials['oauth2_refresh_token'] = account.oauth2_refresh_token
                 
                 logger.info(f"🔐 Credenciales obtenidas para cuenta ID {account_id} ({account.email})")
                 return {
@@ -1595,6 +1595,578 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"❌ Error en búsqueda vectorial para usuario {user_id}: {e}")
             raise RuntimeError(f"Error en la búsqueda vectorial: {str(e)}")
+
+    # =============================================================================
+    # MÉTODOS DE GESTIÓN DE ESTADÍSTICAS Y PROCESAMIENTO DE EMAILS
+    # =============================================================================
+
+    def log_email_processed(self, email_account_id: int, category: str, action_taken: str, 
+                           tokens_used: int = 0, email_data: dict = None) -> dict:
+        """
+        Registra el procesamiento de un email en las estadísticas.
+        
+        Args:
+            email_account_id (int): ID de la cuenta de email
+            category (str): Categoría del email ('question', 'spam', 'forward', 'other')
+            action_taken (str): Acción realizada ('responded', 'forwarded', 'ignored', 'spam')
+            tokens_used (int): Número de tokens utilizados en el procesamiento
+            email_data (dict, optional): Datos adicionales del email procesado
+            
+        Returns:
+            dict: Información del registro de estadísticas con éxito/error
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos o la cuenta no existe
+            RuntimeError: Si hay error en la base de datos
+        """
+        # Validaciones de entrada
+        if not isinstance(email_account_id, int) or email_account_id <= 0:
+            raise ValueError("El ID de la cuenta de email debe ser un entero positivo")
+        
+        if not category or not category.strip():
+            raise ValueError("La categoría no puede estar vacía")
+        
+        if not action_taken or not action_taken.strip():
+            raise ValueError("La acción realizada no puede estar vacía")
+        
+        # Validar categorías permitidas
+        valid_categories = {'question', 'spam', 'forward', 'other', 'support', 'commercial'}
+        category = category.strip().lower()
+        if category not in valid_categories:
+            raise ValueError(f"Categoría inválida. Debe ser una de: {valid_categories}")
+        
+        # Validar acciones permitidas
+        valid_actions = {'responded', 'forwarded', 'ignored', 'spam', 'processed'}
+        action_taken = action_taken.strip().lower()
+        if action_taken not in valid_actions:
+            raise ValueError(f"Acción inválida. Debe ser una de: {valid_actions}")
+        
+        if not isinstance(tokens_used, int) or tokens_used < 0:
+            raise ValueError("Los tokens utilizados deben ser un entero no negativo")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                from .models.statistics import EmailProcessed
+                
+                # Verificar que la cuenta de email existe
+                email_account = EmailAccount.get_by_id(db, email_account_id)
+                if not email_account:
+                    raise ValueError(f"Cuenta de email con ID {email_account_id} no encontrada")
+                
+                # Crear registro de email procesado
+                # Convertir action_taken a campos booleanos
+                email_responded = (action_taken == 'responded')
+                email_forwarded = (action_taken == 'forwarded')
+                
+                # Para la respuesta, usar los datos del email si están disponibles
+                answer_text = None
+                forwarded_to = None
+                
+                if email_data:
+                    if email_responded and 'response_text' in email_data:
+                        answer_text = email_data['response_text']
+                    elif email_forwarded and 'forwarded_to' in email_data:
+                        forwarded_to = email_data['forwarded_to']
+                
+                email_processed = EmailProcessed.create(
+                    db, email_account_id, category,
+                    email_responded=email_responded,
+                    answer=answer_text,
+                    email_forwarded=email_forwarded,
+                    forwarded_to=forwarded_to,
+                    tokens_used=tokens_used
+                )
+                
+                # Actualizar estadísticas mensuales del usuario
+                user_id = email_account.user_id
+                self._update_monthly_usage(db, user_id, email_account_id, action_taken, tokens_used)
+                
+                processed_data = email_processed.to_dict()
+                
+                logger.info(f"✅ Email procesado registrado exitosamente: ID {email_processed.id}")
+                logger.info(f"   Cuenta: {email_account.email} (ID: {email_account_id})")
+                logger.info(f"   Categoría: {category}, Acción: {action_taken}")
+                logger.info(f"   Tokens utilizados: {tokens_used}")
+                
+                return {
+                    'success': True,
+                    'email_processed': processed_data,
+                    'account_info': {
+                        'email': email_account.email,
+                        'user_id': user_id
+                    },
+                    'message': 'Email procesado registrado exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error registrando email procesado para cuenta {email_account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def increment_tokens_used(self, email_account_id: int, tokens: int) -> dict:
+        """
+        Incrementa el contador de tokens utilizados para una cuenta de email.
+        
+        Args:
+            email_account_id (int): ID de la cuenta de email
+            tokens (int): Número de tokens a incrementar
+            
+        Returns:
+            dict: Información del incremento con éxito/error
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos o la cuenta no existe
+            RuntimeError: Si hay error en la base de datos
+        """
+        if not isinstance(email_account_id, int) or email_account_id <= 0:
+            raise ValueError("El ID de la cuenta de email debe ser un entero positivo")
+        
+        if not isinstance(tokens, int) or tokens <= 0:
+            raise ValueError("Los tokens deben ser un entero positivo")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                from .models.statistics import UserUsageMonthly
+                from datetime import datetime
+                
+                # Verificar que la cuenta de email existe
+                email_account = EmailAccount.get_by_id(db, email_account_id)
+                if not email_account:
+                    raise ValueError(f"Cuenta de email con ID {email_account_id} no encontrada")
+                
+                user_id = email_account.user_id
+                now = datetime.now()
+                
+                # Actualizar o crear registro mensual
+                monthly_usage = UserUsageMonthly.get_or_create_current(db, user_id, now.year, now.month)
+                previous_tokens = monthly_usage.tokens_used
+                monthly_usage.increment_tokens(tokens)
+                
+                logger.info(f"✅ Tokens incrementados exitosamente para cuenta {email_account_id}")
+                logger.info(f"   Usuario: {user_id} ({email_account.email})")
+                logger.info(f"   Tokens añadidos: {tokens}")
+                logger.info(f"   Total tokens del mes: {previous_tokens} → {monthly_usage.tokens_used}")
+                
+                return {
+                    'success': True,
+                    'user_id': user_id,
+                    'email_account_id': email_account_id,
+                    'tokens_increment': tokens,
+                    'previous_total': previous_tokens,
+                    'new_total': monthly_usage.tokens_used,
+                    'month': f"{now.year}-{now.month:02d}",
+                    'message': f'Incrementados {tokens} tokens exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error incrementando tokens para cuenta {email_account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def get_daily_statistics(self, email_account_id: int, date_range: int = 30) -> dict:
+        """
+        Obtiene estadísticas diarias de procesamiento de emails.
+        
+        Args:
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás (default: 30)
+            
+        Returns:
+            dict: Estadísticas diarias agrupadas
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos o la cuenta no existe
+            RuntimeError: Si hay error en la base de datos
+        """
+        if not isinstance(email_account_id, int) or email_account_id <= 0:
+            raise ValueError("El ID de la cuenta de email debe ser un entero positivo")
+        
+        if not isinstance(date_range, int) or date_range <= 0 or date_range > 365:
+            raise ValueError("El rango de fechas debe ser un entero entre 1 y 365 días")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                from .models.statistics import EmailProcessed
+                
+                # Verificar que la cuenta de email existe
+                email_account = EmailAccount.get_by_id(db, email_account_id)
+                if not email_account:
+                    raise ValueError(f"Cuenta de email con ID {email_account_id} no encontrada")
+                
+                # Obtener estadísticas diarias usando el método del modelo
+                daily_stats = EmailProcessed.get_daily_statistics(db, email_account_id, date_range)
+                
+                # Procesar datos para el frontend
+                processed_stats = []
+                total_emails = 0
+                total_responded = 0
+                total_forwarded = 0
+                total_tokens = 0
+                
+                for stat in daily_stats:
+                    day_data = {
+                        'date': stat['date'],
+                        'emails_processed': stat['total_emails'],
+                        'emails_responded': stat['responded_count'],
+                        'emails_forwarded': stat['forwarded_count'],
+                        'emails_ignored': stat['ignored_count'],
+                        'emails_spam': stat['spam_count'],
+                        'tokens_used': stat['total_tokens'],
+                        'categories': stat['categories']
+                    }
+                    processed_stats.append(day_data)
+                    
+                    # Acumular totales
+                    total_emails += stat['total_emails']
+                    total_responded += stat['responded_count']
+                    total_forwarded += stat['forwarded_count']
+                    total_tokens += stat['total_tokens']
+                
+                logger.info(f"✅ Estadísticas diarias obtenidas para cuenta {email_account_id}")
+                logger.info(f"   Rango: {date_range} días")
+                logger.info(f"   Total emails procesados: {total_emails}")
+                logger.info(f"   Total tokens utilizados: {total_tokens}")
+                
+                return {
+                    'success': True,
+                    'email_account_id': email_account_id,
+                    'account_info': {
+                        'email': email_account.email,
+                        'user_id': email_account.user_id
+                    },
+                    'date_range_days': date_range,
+                    'daily_statistics': processed_stats,
+                    'summary': {
+                        'total_emails_processed': total_emails,
+                        'total_emails_responded': total_responded,
+                        'total_emails_forwarded': total_forwarded,
+                        'total_tokens_used': total_tokens,
+                        'average_emails_per_day': round(total_emails / max(len(processed_stats), 1), 2),
+                        'response_rate': round((total_responded / max(total_emails, 1)) * 100, 2),
+                        'forward_rate': round((total_forwarded / max(total_emails, 1)) * 100, 2)
+                    },
+                    'message': f'Estadísticas de {date_range} días obtenidas exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo estadísticas diarias para cuenta {email_account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def get_category_distribution(self, email_account_id: int, date_range: int = 30) -> dict:
+        """
+        Obtiene la distribución de emails por categorías.
+        
+        Args:
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás (default: 30)
+            
+        Returns:
+            dict: Distribución por categorías con porcentajes
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos o la cuenta no existe
+            RuntimeError: Si hay error en la base de datos
+        """
+        if not isinstance(email_account_id, int) or email_account_id <= 0:
+            raise ValueError("El ID de la cuenta de email debe ser un entero positivo")
+        
+        if not isinstance(date_range, int) or date_range <= 0 or date_range > 365:
+            raise ValueError("El rango de fechas debe ser un entero entre 1 y 365 días")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                from .models.statistics import EmailProcessed
+                
+                # Verificar que la cuenta de email existe
+                email_account = EmailAccount.get_by_id(db, email_account_id)
+                if not email_account:
+                    raise ValueError(f"Cuenta de email con ID {email_account_id} no encontrada")
+                
+                # Obtener distribución por categorías usando el método del modelo
+                category_stats = EmailProcessed.get_category_distribution(db, email_account_id, date_range)
+                
+                # Calcular totales y porcentajes
+                total_emails = sum(stat['count'] for stat in category_stats)
+                
+                processed_categories = []
+                for stat in category_stats:
+                    category_data = {
+                        'category': stat['category'],
+                        'count': stat['count'],
+                        'percentage': round((stat['count'] / max(total_emails, 1)) * 100, 2),
+                        'avg_tokens_per_email': round(stat['avg_tokens'], 2) if stat['avg_tokens'] else 0
+                    }
+                    processed_categories.append(category_data)
+                
+                # Ordenar por cantidad descendente
+                processed_categories.sort(key=lambda x: x['count'], reverse=True)
+                
+                logger.info(f"✅ Distribución por categorías obtenida para cuenta {email_account_id}")
+                logger.info(f"   Rango: {date_range} días")
+                logger.info(f"   Total emails: {total_emails}")
+                logger.info(f"   Categorías encontradas: {len(processed_categories)}")
+                
+                return {
+                    'success': True,
+                    'email_account_id': email_account_id,
+                    'account_info': {
+                        'email': email_account.email,
+                        'user_id': email_account.user_id
+                    },
+                    'date_range_days': date_range,
+                    'total_emails': total_emails,
+                    'categories': processed_categories,
+                    'summary': {
+                        'most_common_category': processed_categories[0]['category'] if processed_categories else None,
+                        'most_common_percentage': processed_categories[0]['percentage'] if processed_categories else 0,
+                        'unique_categories': len(processed_categories)
+                    },
+                    'message': f'Distribución por categorías de {date_range} días obtenida exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo distribución por categorías para cuenta {email_account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def calculate_time_saved(self, email_account_id: int, date_range: int = 30) -> dict:
+        """
+        Calcula el tiempo ahorrado basado en emails procesados automáticamente.
+        
+        Asume 5 minutos por email como tiempo promedio de procesamiento manual.
+        
+        Args:
+            email_account_id (int): ID de la cuenta de email
+            date_range (int): Número de días hacia atrás (default: 30)
+            
+        Returns:
+            dict: Cálculo de tiempo ahorrado en diferentes unidades
+            
+        Raises:
+            ValueError: Si los parámetros son inválidos o la cuenta no existe
+            RuntimeError: Si hay error en la base de datos
+        """
+        if not isinstance(email_account_id, int) or email_account_id <= 0:
+            raise ValueError("El ID de la cuenta de email debe ser un entero positivo")
+        
+        if not isinstance(date_range, int) or date_range <= 0 or date_range > 365:
+            raise ValueError("El rango de fechas debe ser un entero entre 1 y 365 días")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                from .models.statistics import EmailProcessed
+                
+                # Verificar que la cuenta de email existe
+                email_account = EmailAccount.get_by_id(db, email_account_id)
+                if not email_account:
+                    raise ValueError(f"Cuenta de email con ID {email_account_id} no encontrada")
+                
+                # Obtener estadísticas de emails automatizados (respondidos + reenviados)
+                automated_stats = EmailProcessed.get_automated_email_count(db, email_account_id, date_range)
+                
+                # Constantes para cálculo de tiempo
+                MINUTES_PER_EMAIL = 5  # Tiempo promedio de procesamiento manual
+                
+                # Calcular tiempo ahorrado
+                automated_emails = automated_stats['responded_count'] + automated_stats['forwarded_count']
+                total_minutes_saved = automated_emails * MINUTES_PER_EMAIL
+                
+                # Convertir a diferentes unidades
+                hours_saved = total_minutes_saved / 60
+                days_saved = hours_saved / 8  # Asumiendo jornada laboral de 8 horas
+                
+                # Calcular proyecciones
+                daily_average = automated_emails / max(date_range, 1)
+                monthly_projection = daily_average * 30 * MINUTES_PER_EMAIL
+                yearly_projection = daily_average * 365 * MINUTES_PER_EMAIL
+                
+                logger.info(f"✅ Tiempo ahorrado calculado para cuenta {email_account_id}")
+                logger.info(f"   Rango: {date_range} días")
+                logger.info(f"   Emails automatizados: {automated_emails}")
+                logger.info(f"   Tiempo ahorrado: {total_minutes_saved} minutos ({hours_saved:.1f} horas)")
+                
+                return {
+                    'success': True,
+                    'email_account_id': email_account_id,
+                    'account_info': {
+                        'email': email_account.email,
+                        'user_id': email_account.user_id
+                    },
+                    'date_range_days': date_range,
+                    'calculation_params': {
+                        'minutes_per_email': MINUTES_PER_EMAIL,
+                        'automated_emails': automated_emails,
+                        'responded_emails': automated_stats['responded_count'],
+                        'forwarded_emails': automated_stats['forwarded_count']
+                    },
+                    'time_saved': {
+                        'total_minutes': total_minutes_saved,
+                        'total_hours': round(hours_saved, 2),
+                        'total_days': round(days_saved, 2),
+                        'formatted_time': self._format_time_duration(total_minutes_saved)
+                    },
+                    'projections': {
+                        'daily_average_emails': round(daily_average, 1),
+                        'monthly_minutes': round(monthly_projection, 0),
+                        'monthly_hours': round(monthly_projection / 60, 1),
+                        'yearly_minutes': round(yearly_projection, 0),
+                        'yearly_hours': round(yearly_projection / 60, 1),
+                        'yearly_days': round(yearly_projection / (60 * 8), 1)
+                    },
+                    'message': f'Tiempo ahorrado calculado: {self._format_time_duration(total_minutes_saved)}'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error calculando tiempo ahorrado para cuenta {email_account_id}: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def cleanup_old_statistics(self, days_to_keep: int = 90) -> dict:
+        """
+        Limpia estadísticas antiguas para optimizar el rendimiento de la base de datos.
+        
+        Args:
+            days_to_keep (int): Número de días de estadísticas a mantener (default: 90)
+            
+        Returns:
+            dict: Información de la limpieza realizada
+            
+        Raises:
+            ValueError: Si days_to_keep es inválido
+            RuntimeError: Si hay error en la base de datos
+        """
+        if not isinstance(days_to_keep, int) or days_to_keep <= 0:
+            raise ValueError("Los días a mantener deben ser un entero positivo")
+        
+        if days_to_keep < 30:
+            raise ValueError("Se requiere mantener al menos 30 días de estadísticas")
+        
+        try:
+            with self.get_db_session() as db:
+                from .models.statistics import EmailProcessed
+                from datetime import datetime, timedelta
+                
+                # Calcular fecha límite
+                cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+                
+                # Contar registros a eliminar antes de la limpieza
+                records_to_delete = EmailProcessed.count_old_records(db, cutoff_date)
+                
+                if records_to_delete == 0:
+                    logger.info(f"ℹ️  No hay estadísticas antiguas que limpiar (>{days_to_keep} días)")
+                    return {
+                        'success': True,
+                        'records_deleted': 0,
+                        'cutoff_date': cutoff_date.isoformat(),
+                        'message': 'No hay registros antiguos para eliminar'
+                    }
+                
+                # Realizar limpieza
+                deleted_count = EmailProcessed.cleanup_old_records(db, cutoff_date)
+                
+                logger.info(f"✅ Limpieza de estadísticas completada")
+                logger.info(f"   Registros eliminados: {deleted_count}")
+                logger.info(f"   Fecha límite: {cutoff_date.strftime('%Y-%m-%d')}")
+                logger.info(f"   Días mantenidos: {days_to_keep}")
+                
+                return {
+                    'success': True,
+                    'records_deleted': deleted_count,
+                    'cutoff_date': cutoff_date.isoformat(),
+                    'days_kept': days_to_keep,
+                    'cleanup_date': datetime.now().isoformat(),
+                    'message': f'Eliminados {deleted_count} registros antiguos exitosamente'
+                }
+                
+        except ValueError:
+            raise  # Re-lanzar errores de validación
+        except Exception as e:
+            logger.error(f"❌ Error en limpieza de estadísticas: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
+    def _update_monthly_usage(self, db_session, user_id: int, email_account_id: int, 
+                            action_taken: str, tokens_used: int) -> None:
+        """
+        Actualiza las estadísticas mensuales de uso del usuario.
+        
+        Método interno para mantener actualizados los contadores mensuales.
+        
+        Args:
+            db_session: Sesión de base de datos
+            user_id (int): ID del usuario
+            email_account_id (int): ID de la cuenta de email
+            action_taken (str): Acción realizada
+            tokens_used (int): Tokens utilizados
+        """
+        try:
+            from .models.statistics import UserUsageMonthly
+            from datetime import datetime
+            
+            now = datetime.now()
+            
+            # Obtener o crear registro mensual
+            monthly_usage = UserUsageMonthly.get_or_create_current(db_session, user_id, now.year, now.month)
+            
+            # Incrementar contadores según la acción
+            monthly_usage.emails_processed += 1
+            
+            if action_taken == 'responded':
+                monthly_usage.emails_responded += 1
+            elif action_taken == 'forwarded':
+                monthly_usage.emails_forwarded += 1
+            
+            if tokens_used > 0:
+                monthly_usage.tokens_used += tokens_used
+            
+            # Actualizar timestamp
+            monthly_usage.last_updated = now
+            
+            db_session.flush()
+            
+        except Exception as e:
+            logger.warning(f"⚠️  Error actualizando estadísticas mensuales para usuario {user_id}: {e}")
+            # No fallar el procesamiento principal por errores de estadísticas
+
+    def _format_time_duration(self, total_minutes: int) -> str:
+        """
+        Formatea una duración en minutos a un string legible.
+        
+        Args:
+            total_minutes (int): Total de minutos
+            
+        Returns:
+            str: Duración formateada (ej: "2 días, 3 horas, 45 minutos")
+        """
+        if total_minutes == 0:
+            return "0 minutos"
+        
+        days = total_minutes // (24 * 60)
+        hours = (total_minutes % (24 * 60)) // 60
+        minutes = total_minutes % 60
+        
+        parts = []
+        
+        if days > 0:
+            parts.append(f"{days} día{'s' if days != 1 else ''}")
+        
+        if hours > 0:
+            parts.append(f"{hours} hora{'s' if hours != 1 else ''}")
+        
+        if minutes > 0:
+            parts.append(f"{minutes} minuto{'s' if minutes != 1 else ''}")
+        
+        return ", ".join(parts)
 
     # =============================================================================
     # MÉTODOS DE GESTIÓN DE AUTOMATIZACIONES
