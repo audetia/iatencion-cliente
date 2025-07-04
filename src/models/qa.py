@@ -12,6 +12,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from typing import List, Optional, Dict, Union
+from pgvector.sqlalchemy import Vector
 
 from .base import Base, TimestampMixin
 from ..agents import Agents
@@ -497,8 +498,8 @@ class QuestionVariant(Base):
     id = Column(Integer, primary_key=True, index=True)
     question_id = Column(Integer, ForeignKey('question.id'), nullable=False, index=True)
     variant_text = Column(Text, nullable=False)
-    # El embedding se maneja como un campo especial en SQLAlchemy con pgvector
-    embedding = Column('embedding', None, nullable=False)
+    # Usar el tipo Vector de pgvector con dimensionalidad 1536
+    embedding = Column(Vector(1536), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relaciones

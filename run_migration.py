@@ -76,11 +76,17 @@ def run_migration():
         logger.error("POSTGRES_URL environment variable not found!")
         sys.exit(1)
     
-    # Read the migration file
-    migration_file = Path("migrations/001_initial_schema.sql")
-    if not migration_file.exists():
-        logger.error(f"Migration file not found: {migration_file}")
-        sys.exit(1)
+    # Define migration files in order
+    migration_files = [
+        "migrations/001_initial_schema.sql",
+        "migrations/002_qa_tracking.sql"
+    ]
+    
+    # Check all migration files exist
+    for migration_file in migration_files:
+        if not Path(migration_file).exists():
+            logger.error(f"Migration file not found: {migration_file}")
+            sys.exit(1)
     
     try:
         # Import psycopg2 for database connection
@@ -95,38 +101,46 @@ def run_migration():
         
         logger.info("✅ Successfully connected to PostgreSQL database")
         
-        # Read the migration file
-        with open(migration_file, 'r', encoding='utf-8') as f:
-            migration_sql = f.read()
+        # Execute each migration file
+        total_statements = 0
+        for migration_file in migration_files:
+            logger.info(f"🔄 Executing migration: {migration_file}")
+            
+            # Read the migration file
+            with open(migration_file, 'r', encoding='utf-8') as f:
+                migration_sql = f.read()
+            
+            # Split into proper statements
+            statements = split_sql_statements(migration_sql)
+            
+            logger.info(f"Found {len(statements)} SQL statements in {migration_file}")
+            total_statements += len(statements)
+            
+            # Execute each statement
+            with conn.cursor() as cursor:
+                for i, statement in enumerate(statements, 1):
+                    statement = statement.strip()
+                    if not statement:
+                        continue
+                        
+                    try:
+                        logger.debug(f"Executing statement {i}: {statement[:50]}...")
+                        cursor.execute(statement)
+                        logger.debug(f"✅ Statement {i} executed successfully")
+                    except Exception as e:
+                        # Handle specific cases
+                        if "already exists" in str(e).lower():
+                            logger.warning(f"⚠️  Statement {i} skipped (already exists): {str(e)}")
+                        elif "does not exist" in str(e).lower():
+                            logger.warning(f"⚠️  Statement {i} skipped (does not exist): {str(e)}")
+                        else:
+                            logger.error(f"❌ Error executing statement {i}: {str(e)}")
+                            logger.error(f"Statement: {statement}")
+                            raise
+            
+            logger.info(f"✅ Migration {migration_file} completed successfully!")
         
-        # Split into proper statements
-        statements = split_sql_statements(migration_sql)
-        
-        logger.info(f"Found {len(statements)} SQL statements to execute")
-        
-        # Execute each statement
-        with conn.cursor() as cursor:
-            for i, statement in enumerate(statements, 1):
-                statement = statement.strip()
-                if not statement:
-                    continue
-                    
-                try:
-                    logger.debug(f"Executing statement {i}: {statement[:50]}...")
-                    cursor.execute(statement)
-                    logger.debug(f"✅ Statement {i} executed successfully")
-                except Exception as e:
-                    # Handle specific cases
-                    if "already exists" in str(e).lower():
-                        logger.warning(f"⚠️  Statement {i} skipped (already exists): {str(e)}")
-                    elif "does not exist" in str(e).lower():
-                        logger.warning(f"⚠️  Statement {i} skipped (does not exist): {str(e)}")
-                    else:
-                        logger.error(f"❌ Error executing statement {i}: {str(e)}")
-                        logger.error(f"Statement: {statement}")
-                        raise
-        
-        logger.info("✅ Migration completed successfully!")
+        logger.info(f"✅ All migrations completed successfully! Total statements: {total_statements}")
         logger.info("Database schema initialized with all tables, indexes, and initial data.")
         
         # Verify the migration

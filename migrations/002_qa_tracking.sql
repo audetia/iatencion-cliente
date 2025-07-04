@@ -3,7 +3,7 @@
 
 -- Add columns to track Q&A usage
 ALTER TABLE email_processed 
-ADD COLUMN question_id INTEGER REFERENCES questions(id) ON DELETE SET NULL,
+ADD COLUMN question_id INTEGER REFERENCES question(id) ON DELETE SET NULL,
 ADD COLUMN similarity_score FLOAT CHECK (similarity_score >= 0.0 AND similarity_score <= 1.0);
 
 -- Add index for Q&A usage queries

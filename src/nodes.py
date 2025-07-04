@@ -244,6 +244,7 @@ class Nodes:
         print(Fore.YELLOW + "Retrieving information from personalized Q&A...\n" + Style.RESET_ALL)
         final_answer = ""
         needs_human_attention = False
+        qa_usage_stats = []  # Initialize here to ensure it's always available
         
         # Get email_account_id from state
         email_account_id = state.get("email_account_id")
@@ -251,7 +252,8 @@ class Nodes:
             logger.warning("No email_account_id found in state, marking for human attention")
             return {
                 "retrieved_documents": "",
-                "needs_human_attention": True
+                "needs_human_attention": True,
+                "qa_usage_stats": qa_usage_stats
             }
         
         try:
@@ -261,7 +263,8 @@ class Nodes:
                 logger.error(f"Email account {email_account_id} not found")
                 return {
                     "retrieved_documents": "",
-                    "needs_human_attention": True
+                    "needs_human_attention": True,
+                    "qa_usage_stats": qa_usage_stats
                 }
             
             user_id = account_info_result['account_info']['user_id']
@@ -273,11 +276,11 @@ class Nodes:
                 logger.warning("No RAG queries to process")
                 return {
                     "retrieved_documents": "",
-                    "needs_human_attention": True
+                    "needs_human_attention": True,
+                    "qa_usage_stats": qa_usage_stats
                 }
             
             # Process each RAG query using dynamic RAG search
-            qa_usage_stats = []  # Track Q&A usage for statistics
             for query in state["rag_queries"]:
                 logger.debug(f"Processing query: {query[:100]}...")
                 
@@ -406,17 +409,19 @@ class Nodes:
         if email_sendable:
             logger.info("✅ Email approved by proofreader, ready to be sent")
             print(Fore.GREEN + "Email is good, ready to be sent!!!" + Style.RESET_ALL)
-            # Pop the email to avoid reprocessing
-            email = state["emails"].pop()
-            logger.debug(f"Removed email from processing queue - Subject: {email.subject}, From: {email.sender}")
+            # Pop the email to avoid reprocessing (only if there are emails)
+            if state.get("emails"):
+                email = state["emails"].pop()
+                logger.debug(f"Removed email from processing queue - Subject: {email.subject}, From: {email.sender}")
             state["writer_messages"] = []
             return "send"
         elif state["trials"] >= 3:
             logger.warning("⚠️ Email not approved after maximum trials, stopping further attempts")
             print(Fore.RED + "Email is not good, we reached max trials must stop!!!" + Style.RESET_ALL)
-            # Pop the email to avoid reprocessing
-            email = state["emails"].pop()
-            logger.debug(f"Removed email from processing queue - Subject: {email.subject}, From: {email.sender}")
+            # Pop the email to avoid reprocessing (only if there are emails)
+            if state.get("emails"):
+                email = state["emails"].pop()
+                logger.debug(f"Removed email from processing queue - Subject: {email.subject}, From: {email.sender}")
             state["writer_messages"] = []
             return "stop"
         else:
@@ -592,7 +597,16 @@ class Nodes:
             
             if not automations_result['success']:
                 logger.warning(f"Failed to get automations: {automations_result}")
-                return {"forward_decision": None, "forward_error": "Failed to get automations"}
+                return {
+                    "forward_decision": {
+                        "should_forward": False,
+                        "forward_automation_id": None,
+                        "confidence_score": 0.0,
+                        "reason": "Failed to get automations"
+                    },
+                    "forward_error": "Failed to get automations",
+                    "session_tokens_used": state.get("session_tokens_used", 0)
+                }
             
             # Separar automatizaciones de reenvío y obtener temas Q&A
             forward_automations = []
@@ -662,8 +676,14 @@ class Nodes:
             logger.error(f"Error evaluating forward rules: {str(e)}")
             print(Fore.RED + f"Error evaluating forward rules: {str(e)}\n" + Style.RESET_ALL)
             return {
-                "forward_decision": None,
-                "forward_error": str(e)
+                "forward_decision": {
+                    "should_forward": False,
+                    "forward_automation_id": None,
+                    "confidence_score": 0.0,
+                    "reason": f"Error: {str(e)}"
+                },
+                "forward_error": str(e),
+                "session_tokens_used": state.get("session_tokens_used", 0)
             }
 
     def forward_email(self, state: GraphState) -> GraphState:

@@ -5,7 +5,7 @@ Este módulo define los modelos relacionados con las estadísticas y tracking de
 que permiten registrar emails procesados y agregar estadísticas mensuales por usuario.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, CheckConstraint, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, CheckConstraint, UniqueConstraint, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Union, Tuple
@@ -86,8 +86,8 @@ class EmailProcessed(Base):
     category = Column(String(100), index=True)
     tokens_used = Column(Integer, default=0, nullable=False)
     # Q&A tracking fields
-    question_id = Column(Integer, ForeignKey('questions.id'), nullable=True, index=True)
-    similarity_score = Column('similarity_score', None, nullable=True)  # Float with CHECK constraint
+    question_id = Column(Integer, ForeignKey('question.id'), nullable=True, index=True)
+    similarity_score = Column(Float, CheckConstraint('similarity_score >= 0.0 AND similarity_score <= 1.0'), nullable=True)
     
     # Relaciones
     email_account = relationship("EmailAccount", back_populates="email_processed")

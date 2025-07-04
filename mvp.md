@@ -181,7 +181,7 @@
 
 **Subtareas:**
 
-- [ ] Crear script `tests/test_modified_flow.py` con casos de prueba:
+- [X] Crear script `tests/test_modified_flow.py` con casos de prueba:
 
   - Email que debe ser reenviado
   - Email con pregunta que tiene respuesta en Q&A

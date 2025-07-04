@@ -13,7 +13,6 @@ sse_starlette
 uvicorn
 gunicorn
 fastapi
-pytest
 psycopg2-binary
 pgvector
 sqlalchemy
@@ -23,3 +22,9 @@ structlog
 loguru
 python-json-logger
 contextvars
+# Tests
+pytest
+# Testing dependencies
+pytest-factoryboy
+faker
+numpy

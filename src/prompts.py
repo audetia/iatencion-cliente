@@ -61,7 +61,7 @@ You will be given the text of an email from a customer/lead. This email represen
 
 
 # Personalized Q&A response prompt
-PERSONALIZED_QA_RESPONSE_PROMPT = """
+GENERATE_RAG_ANSWER_PROMPT = """
 # **Role:**
 
 You are a professional customer support agent working for a company. Your role is to provide accurate, helpful responses using the company's personalized Q&A knowledge base.
