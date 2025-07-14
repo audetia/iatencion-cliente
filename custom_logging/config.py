@@ -189,7 +189,7 @@ class LoggingConfig:
             format=log_format,
             level=self.log_level,
             rotation=self.max_log_size,
-            retention=f"{self.backup_count} files",
+            retention=self.backup_count,  # Usar número directamente, no string con "files"
             compression="zip",
             serialize=self.log_format == 'JSON',
             enqueue=True  # Thread-safe

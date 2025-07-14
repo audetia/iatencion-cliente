@@ -76,15 +76,47 @@ def test_engine():
 
 @pytest.fixture(scope="function")
 def db_session(test_engine) -> Generator[Session, None, None]:
-    """Create a new database session for each test."""
+    """Create a new database session for each test with complete cleanup."""
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = TestSessionLocal()
     
+    # Clean all data before test to ensure clean state
+    _clean_all_tables(session)
+    
     yield session
     
-    # Rollback and close after each test
-    session.rollback()
-    session.close()
+    # Complete cleanup after each test
+    try:
+        session.rollback()
+    except Exception:
+        pass
+    finally:
+        _clean_all_tables(session)
+        session.close()
+
+def _clean_all_tables(session):
+    """Clean all tables in correct order to avoid foreign key violations."""
+    try:
+        # Delete in correct order to respect foreign key constraints
+        session.execute(text("DELETE FROM user_usage_monthly"))
+        session.execute(text("DELETE FROM email_processed"))
+        session.execute(text("DELETE FROM response_automation"))
+        session.execute(text("DELETE FROM forward_automation"))
+        session.execute(text("DELETE FROM automation"))
+        session.execute(text("DELETE FROM answer"))
+        session.execute(text("DELETE FROM question_variant"))
+        session.execute(text("DELETE FROM question"))
+        session.execute(text("DELETE FROM email_account"))
+        session.execute(text("DELETE FROM users"))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        # Si hay error, intentar con TRUNCATE CASCADE como último recurso
+        try:
+            session.execute(text("TRUNCATE users, email_account, question, question_variant, answer, automation, response_automation, forward_automation, email_processed, user_usage_monthly RESTART IDENTITY CASCADE"))
+            session.commit()
+        except Exception:
+            session.rollback()
 
 @pytest.fixture
 def db_manager(test_engine) -> DatabaseManager:
@@ -103,53 +135,59 @@ def sample_users(db_session) -> List[User]:
     """Create sample users with different profiles."""
     users = []
     
-    # User 1: Active power user
-    user1 = User(
-        email="maria.garcia@empresa.com",
-        name="María García",
-        is_verified=True,
-        created_at=datetime.now() - timedelta(days=180),
-        updated_at=datetime.now() - timedelta(days=2)
-    )
-    db_session.add(user1)
-    users.append(user1)
-    
-    # User 2: Moderate user
-    user2 = User(
-        email="juan.martinez@startup.es",
-        name="Juan Martínez",
-        is_verified=True,
-        created_at=datetime.now() - timedelta(days=90),
-        updated_at=datetime.now() - timedelta(days=7)
-    )
-    db_session.add(user2)
-    users.append(user2)
-    
-    # User 3: New user
-    user3 = User(
-        email="ana.lopez@consultoria.com",
-        name="Ana López",
-        is_verified=True,
-        created_at=datetime.now() - timedelta(days=15),
-        updated_at=datetime.now() - timedelta(days=1)
-    )
-    db_session.add(user3)
-    users.append(user3)
-    
-    # User 4: Inactive/test user
-    user4 = User(
-        email="test.user@example.com",
-        name="Test User",
-        is_verified=False,
-        created_at=datetime.now() - timedelta(days=365),
-        updated_at=datetime.now() - timedelta(days=300)
-    )
-    db_session.add(user4)
-    users.append(user4)
-    
-    db_session.commit()
-    logger.info(f"✅ Created {len(users)} sample users")
-    return users 
+    try:
+        # User 1: Active power user
+        user1 = User(
+            email="maria.garcia@empresa.com",
+            name="María García",
+            is_verified=True,
+            created_at=datetime.now() - timedelta(days=180),
+            updated_at=datetime.now() - timedelta(days=2)
+        )
+        db_session.add(user1)
+        users.append(user1)
+        
+        # User 2: Moderate user
+        user2 = User(
+            email="juan.martinez@startup.es",
+            name="Juan Martínez",
+            is_verified=True,
+            created_at=datetime.now() - timedelta(days=90),
+            updated_at=datetime.now() - timedelta(days=7)
+        )
+        db_session.add(user2)
+        users.append(user2)
+        
+        # User 3: New user
+        user3 = User(
+            email="ana.lopez@consultoria.com",
+            name="Ana López",
+            is_verified=True,
+            created_at=datetime.now() - timedelta(days=15),
+            updated_at=datetime.now() - timedelta(days=1)
+        )
+        db_session.add(user3)
+        users.append(user3)
+        
+        # User 4: Inactive/test user
+        user4 = User(
+            email="test.user@example.com",
+            name="Test User",
+            is_verified=False,
+            created_at=datetime.now() - timedelta(days=365),
+            updated_at=datetime.now() - timedelta(days=300)
+        )
+        db_session.add(user4)
+        users.append(user4)
+        
+        db_session.commit()
+        logger.info(f"✅ Created {len(users)} sample users")
+        return users
+        
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"❌ Failed to create sample users: {e}")
+        raise 
 
 # =============================================
 # EMAIL ACCOUNT FIXTURES
@@ -580,13 +618,17 @@ def sample_statistics(db_session, sample_email_accounts, sample_qa_data) -> Dict
                 email_processed_records.append(record)
     
     # Create monthly usage records
-    for user in sample_email_accounts[:4]:
-        user_id = user.user_id
+    # Get unique user IDs to avoid duplicates (some users have multiple email accounts)
+    unique_user_ids = list(set(account.user_id for account in sample_email_accounts[:4]))
+    
+    for user_id in unique_user_ids:
+        # Get account IDs for this user to avoid lazy loading issues
+        user_account_ids = get_user_email_account_ids(user_id, sample_email_accounts)
         
         # Current month
         current_month_records = [
             r for r in email_processed_records 
-            if r.email_account.user_id == user_id 
+            if r.email_account_id in user_account_ids
             and r.processed_at.month == now.month
             and r.processed_at.year == now.year
         ]
@@ -611,7 +653,7 @@ def sample_statistics(db_session, sample_email_accounts, sample_qa_data) -> Dict
         
         prev_month_records = [
             r for r in email_processed_records 
-            if r.email_account.user_id == user_id 
+            if r.email_account_id in user_account_ids
             and r.processed_at.month == prev_month
             and r.processed_at.year == prev_year
         ]
@@ -678,35 +720,20 @@ def active_user_with_data(db_session, sample_users, sample_email_accounts,
 # UTILITY FUNCTIONS FOR TESTS
 # =============================================
 
-def assert_statistics_consistency(db_session, user_id: int):
-    """Verify that statistics are internally consistent."""
-    from sqlalchemy import func
+def get_user_email_account_ids(user_id: int, email_accounts: List) -> List[int]:
+    """
+    Helper function to get email account IDs for a specific user.
     
-    # Get monthly stats
-    monthly_stats = db_session.query(UserUsageMonthly).filter_by(
-        user_id=user_id,
-        year=datetime.now().year,
-        month=datetime.now().month
-    ).first()
-    
-    if not monthly_stats:
-        return True
-    
-    # Get actual processed emails
-    from src.models import EmailAccount, EmailProcessed
-    
-    actual_count = db_session.query(func.count(EmailProcessed.id)).join(
-        EmailAccount
-    ).filter(
-        EmailAccount.user_id == user_id,
-        func.extract('year', EmailProcessed.processed_at) == monthly_stats.year,
-        func.extract('month', EmailProcessed.processed_at) == monthly_stats.month
-    ).scalar()
-    
-    assert actual_count == monthly_stats.emails_processed, \
-        f"Mismatch in email count: actual={actual_count}, recorded={monthly_stats.emails_processed}"
-    
-    return True
+    Args:
+        user_id (int): ID del usuario
+        email_accounts (List): Lista de objetos EmailAccount
+        
+    Returns:
+        List[int]: Lista de IDs de cuentas de email del usuario
+    """
+    return [acc.id for acc in email_accounts if acc.user_id == user_id]
+
+
 
 def get_test_email_content(category: str = "consulta_comercial") -> dict:
     """Generate test email content based on category."""

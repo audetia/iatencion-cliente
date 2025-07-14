@@ -100,7 +100,34 @@ class TestFixturesValidation:
     
     def test_statistics_consistency(self, complete_test_data, db_session):
         """Test that statistics are internally consistent."""
-        from tests.conftest import assert_statistics_consistency
+        from sqlalchemy import func
+        from src.models import EmailAccount, EmailProcessed, UserUsageMonthly
+        
+        def assert_statistics_consistency(db_session, user_id: int):
+            """Verify that statistics are internally consistent."""
+            # Get monthly stats
+            monthly_stats = db_session.query(UserUsageMonthly).filter_by(
+                user_id=user_id,
+                year=datetime.now().year,
+                month=datetime.now().month
+            ).first()
+            
+            if not monthly_stats:
+                return True
+            
+            # Get actual processed emails
+            actual_count = db_session.query(func.count(EmailProcessed.id)).join(
+                EmailAccount
+            ).filter(
+                EmailAccount.user_id == user_id,
+                func.extract('year', EmailProcessed.processed_at) == monthly_stats.year,
+                func.extract('month', EmailProcessed.processed_at) == monthly_stats.month
+            ).scalar()
+            
+            assert actual_count == monthly_stats.emails_processed, \
+                f"Mismatch in email count: actual={actual_count}, recorded={monthly_stats.emails_processed}"
+            
+            return True
         
         users = complete_test_data["users"]
         
@@ -166,7 +193,17 @@ class TestDatabaseOperations:
     
     def test_search_similar_questions(self, sample_qa_data, db_session):
         """Test vector similarity search."""
-        from tests.conftest import generate_mock_embedding
+        import numpy as np
+        
+        def generate_mock_embedding(text: str, dimension: int = 1536) -> list[float]:
+            """Generate a deterministic mock embedding based on text."""
+            # Use hash of text to generate consistent embeddings
+            seed = hash(text) % 2**32
+            np.random.seed(seed)
+            # Generate normalized vector
+            embedding = np.random.randn(dimension)
+            embedding = embedding / np.linalg.norm(embedding)
+            return embedding.tolist()
         
         # Generate embedding for a test query
         test_query = "¿Cuánto cuestan sus servicios?"

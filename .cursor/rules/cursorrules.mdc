@@ -1,164 +1,147 @@
 ---
-description: 
+description: Rules the model should always use when given instructions
 globs: 
 alwaysApply: true
 ---
-You are an expert in Python project development, specializing in building well-structured, maintainable Python applications, with focus on secure deployments, CI/CD pipelines, and best practices (KISS, SOLID, DRY, YAGNI, TDD, Logging). You are now working on a project that uses AI to automate customer support and lead acquisition by automating the mail inbox for an AI agency.
+GLOBAL
+ALWAYS
+* Follow KISS, SOLID, DRY, YAGNI.
+* Ask clarifying questions when context is missing; assume nothing.
+* Keep output minimal, idiomatic, and production‑ready.
+* Follow instructions, sticking to the scope of the task
+* 
+NEVER
+* Invent requirements.
+* Execute shell commands unless explicitly told to.
+* Overengineer
+* Go beyond the scope of the instructions
 
-Core Expertise:
-- Python Development
-- Project Architecture
-- Code Quality, focused on simplicity
-- Package Management
-- Logging & Observability
-- Docker
-- Security & Hardening
+1. Architecture & Project Structure (Use the src/ layout, one package per bounded context, and a high‑level README per domain when requested.)
+ALWAYS
+* Place all application code under src/ or a top‑level package.
+* One responsibility per module; one bounded context per package.
+* Keep infrastructure adapters (DB, HTTP, cache) in /infra; domain models in /domain; FastAPI routers in /api.
+* Store configuration in environment variables or dedicated files (.env, pyproject.toml).
+* Maintain clear documentation inside the code (docstrings, comments). Avoid separate .md documents unless explicitly requested.
+NEVER
+* Mix unrelated concerns or drop code at the repository root.
+* Hard‑code credentials or environment‑specific settings.
 
-Development Guidelines:
+2. Code Style & Documentation (Type hints + PEP 257 docstrings; sorted imports; no “god objects”)
+ALWAYS
+* Use typing and Pydantic models for all I/O boundaries.
+* Write precise docstrings covering purpose, parameters, returns, raises, and usage examples.
+* Order imports: standard library → third‑party → local.
+* Fail fast: raise typed exceptions, log with contextual data, return appropriate 4xx/5xx HTTP codes.
+NEVER
+* Create circular imports or giant “god” classes/functions.
+* Swallow exceptions silently.
+* Rely on external markdown documents for core documentation; the code should be self‑documenting.
 
-1. Project Structure
-ALWAYS:
-- Use proper package layouts
-- Implement modular design (KISS, SOLID, DRY, YAGNI)
-- Follow Python standards (PEP 8, PEP 20)
-- Store configurations in dedicated files or environment variables
-- Maintain clear documentation of the overall architecture inside the comments
-- Separate logical layers (models, services, controllers)
+3. Data Layer (SQLAlchemy 2.x) — Session‑per‑request + Unit‑of‑Work ⇒ atomic transactions & easy rollbacks
+ALWAYS
+* Keep all database logic in database.py; other code imports it but never re‑implements DB details.
+* Create a module‑level engine (via create_async_engine) and an async_sessionmaker; these singletons are safe.
+* Provide a get_session() async context manager (or FastAPI dependency) that yields a fresh AsyncSession per request, commits on success, rolls back on error, and always closes.
+* Encapsulate writes inside a Unit‑of‑Work pattern so each business action is wrapped in one transaction.
+* Declare models with the SQLAlchemy 2.0 declarative API; map only the fields you truly need.
+* Use SQLAlchemy Core queries (select(), update(), etc.); never interpolate raw SQL strings.
+* Leverage type hints and Pydantic schemas at I/O boundaries for validation and clarity.
+* Log queries at debug level when troubleshooting (e.g., echo=True via an env flag), but keep it off in production.
+NEVER
+* Expose a live Session/AsyncSession as a global mutable variable; only the engine and sessionmaker live at module scope.
+* Rely on implicit autocommit; always commit/rollback explicitly inside get_session() or a Unit‑of‑Work.
+* Mutate ORM objects outside an active session scope.
+* Execute any database query or transaction logic outside database.py (repositories and services should call its helpers).
 
-NEVER:
-- Mix unrelated functionalities in the same module
-- Hardcode sensitive credentials or environment-specific settings
-- Skip project structure or flatten everything in one folder
-- Ignore Python or package boundaries
-- Execute commands if you are not asked to
+4. API Layer (FastAPI + Pydantic v2) (End‑to‑end async, validated, paginated, OpenAPI‑documented)
+ALWAYS
+* Define every handler as async def.
+* Use response\_model and explicit status\_code.
+* Validate inputs with Pydantic v2 models; use Settings for secrets.
+* Implement pagination, filtering, and sorting on list endpoints.
+NEVER
+* Block the event loop with CPU‑bound tasks; off‑load to background workers.
+* Return unvalidated dicts or ORM instances directly.
 
-2. Code Organization
-ALWAYS:
-- Keep code clean, simple and readable (KISS, DRY, YAGNI)
-- Use type hints for clarity and maintainability
-- Follow SOLID principles (especially SRP & DIP)
-- Document code with clear docstrings (purpose, params, returns)
-- Organize imports (built-in, third-party, local) in a structured manner
-- Ensure error handling is consistent and explicit
+5. AI / LLM / Agent Layer (LangGraph / LangChain) (Moderation, Redis cache, streaming, cost control)
+ALWAYS
+* Keep prompts in separate template files; version‑control them.
+* Have a ai.py file that handles AI / LLM function calling, whether it is using Lang calls or direct API calls.
+* Use LangGraph nodes as pure functions; unit‑test them in isolation.
+* Enable Redis‑based caching to deduplicate calls; expire caches on model upgrades.
+* Stream responses when supported; implement exponential backoff on 429 errors.
+* Insert human‑in‑the‑loop checkpoints for high‑risk operations.
+* Log and track token usage.
+NEVER
+* Hard‑code API keys; always load from a secret manager.
+* Send PII or internal prompts in telemetry.
+* Use AI calls 
 
-NEVER:
-- Create circular imports or cyclical dependencies
-- Allow a single function/class to do multiple jobs
-- Omit type annotations in critical modules
-- Leave unhandled exceptions or obscure error messages
+6. Async & Performance (Leverage asyncio 3.12/3.13 and FastAPI concurrency patterns)
 
-3. Dependency Management
-ALWAYS:
-- Pin dependencies in a requirements.txt or pyproject.toml
-- Update and audit dependencies regularly for security patches
+ALWAYS
+* Use async/await for all I/O; off‑load blocking code with run\_in\_threadpool.
+* Batch external API calls; throttle via an async rate limiter.
+* Profile with asyncio.run(main, debug=True) and measure p95 latency.
+NEVER
+* Mix synchronous and asynchronous code in the same call chain without off‑loading.
+* Await CPU‑bound work on the event loop.
 
-4. Testing Strategy [ONLY APPLIES WHEN ASKED TO DEVELOP TESTS] 
-ALWAYS:
-- Write unit tests (TDD where possible: Red-Green-Refactor)
-- Implement integration tests for critical paths (DB, services, etc.)
-- Use fixtures to manage setup/teardown consistently
-- Cover edge cases, error scenarios, and boundary conditions
-- Measure coverage and aim for quality > quantity
+7. Logging & Observability (Structured JSON logs + contextvars; ready for ELK/Sentry)
 
-NEVER:
-- Skip test documentation (each test should be self-explanatory)
-- Mix test types (unit vs. integration) in the same folder/module
-- Ignore test isolation (tests must be independent of each other)
-- Leave untested fallback/error paths
+ALWAYS
+* Focus on UX/UI. Readibility is king when it comes to logging.
+* Configure structlog or logging with python‑json‑logger at application start.
+* Enrich logs with request\_id, user\_id, route, and latency.
+* Emit DEBUG/INFO for normal flow, WARNING for recoverable issues, ERROR for failures.
+* Use emojis when they help.
+NEVER
+* Log secrets, tokens, or raw user messages.
+* Swallow errors or use bare except: blocks.
 
-5. Code Quality
-ALWAYS:
-- Use linters (flake8, pylint) and formatters (black) to enforce style
-- Apply best practices to reduce cyclomatic complexity
-- Follow the DRY principle (avoid code duplication), follow de YAGNI (avoid useless code), and KISS (avoid overengineering)
+8. Security & Environment (Secure keys, OWASP API Top‑10, principle of least privilege)
+ALWAYS
+* Load secrets via environment variables or Pydantic Settings; rotate keys periodically.
+* Validate auth tokens early; return 401/403 promptly.
+* Keep dependencies and OS packages updated; run pip‑audit in CI.
+* Use SSH key authentication for servers; configure firewalls (UFW) and Fail2Ban.
+* Run containers and services as non‑root wherever possible.
+NEVER
+* Disable TLS, CSRF, or authentication for convenience.
+* Expose internal stack traces or raw database errors.
 
-NEVER:
-- Let style/format issues accumulate
-- Over-engineer or ignore the KISS principle
-- Bypass continuous integration checks
+9. Testing (Only when explicitly requested; prefer command‑line tests)
+ALWAYS (when tests are requested)
+* Follow TDD: write a failing test, implement the code, then refactor.
+* Run tests via the command line (pytest); isolate DB tests with pytest‑asyncio and transactional rollbacks.
+* Mark slow integration tests and parallelize with pytest‑xdist.
+NEVER
+* Auto‑generate boilerplate tests without a prompt.
+* Enter endless test‑fix loops that over‑engineer solutions.
 
-6. Documentation
-ALWAYS:
-- Write clear docstrings for functions, classes, and modules
-- Document API endpoints (if building a Flask/REST API)
-- Include code examples or usage samples
-- Keep documentation versioned and synchronized with code (inside the functions)
+10. Deployment & Containers (Multi‑stage builds, minimal attack surface; applies when deployment files are requested)
+ALWAYS
+* Use python\:slim base images; install dependencies with --no-cache-dir; run as non‑root.
+* Include a .dockerignore and mount secrets at runtime.
+* Employ rolling updates or start‑first strategies to minimize downtime.
+NEVER
+* Ship development tooling layers in production images.
+* Run containers in privileged mode unless absolutely necessary.
 
-NEVER:
-- Rely solely on inline comments in place of proper docs
-- Fail to update docs after significant refactor
-- Expose credentials or sensitive details in docs
-- Create READMEs. You should only do so when asked about it
+11. Dependency Management
+ALWAYS
+* Pin versions in pyproject.toml; run pip‑compile --upgrade weekly via CI.
+* Remove unused packages promptly; audit with OWASP Dependency‑Check.
+NEVER
+* Depend on abandoned or unverifiable libraries.
+* Upgrade dependencies blindly without reviewing changelogs and CVEs.
 
-7. Development Tools
-ALWAYS:
-- Employ code analysis tools (coverage, test reports, etc.)
-
-NEVER:
-- Overlook local or remote lint/test errors
-- Store large binary artifacts in the repo
-- Disable essential security or scanning tools
-
-8. Best Practices
-ALWAYS:
-- Follow PEP standards (PEP 8, PEP 257 for docstrings)
-- Keep code “KISS” (simple & clear)
-- Handle exceptions carefully, logging them with context
-- Use robust logging (structured logs if possible, following the logging structure from the repo)
-- Implement basic monitoring/metrics where applicable
-- When working with external APIs, implement error handling and retries following the best practices.
-
-NEVER:
-- Swallow exceptions without logging
-- Log sensitive data (passwords, tokens, PII)
-- Neglect performance considerations for critical paths
-- Hardcode environment-specific logic in the code
-
-9. CI/CD & Deployments [WHEN WORKING ON DEPLOYMENT FILES] 
-ALWAYS:
-- Configure pipelines for build, test, and deploy steps
-- Use Docker containers for reproducible builds
-- Employ rolling updates or similar strategies (start-first) to minimize downtime
-- Maintain staging/pre-production environments for final tests
-- Use Docker secrets or external secrets management to secure credentials
-
-NEVER:
-- Hardcode credentials into CI/CD pipelines
-- Ignore build failures or warnings in the pipeline
-- Deploy code without logging or monitoring hooks
-- Use the same environment for dev, staging, and production
-
-10. Docker & Infrastructure
-ALWAYS:
-- Use minimal base images (Alpine or distroless) when compatible
-- Multi-stage builds to reduce final image size
-- Keep a `.dockerignore` to exclude unnecessary files
-- Leverage Docker swarm or Kubernetes for orchestration if needed
-- Ensure environment variables are properly injected, not hardcoded
-
-NEVER:
-- Expose unneeded ports
-- Store secrets in the Docker image
-- Ignore or skip multi-stage builds if you have heavy dependencies
-- Build enormous images with leftover build artifacts
-
-11. Security & VPS Hardening
-ALWAYS:
-- Use SSH key authentication instead of passwords
-- Keep system packages updated (apt upgrades, security patches)
-- Configure firewall (UFW) and optionally Fail2Ban
-- Docker swarm + secrets for sensitive data
-- Restrict container privileges (run as non-root when possible)
-
-NEVER:
-- Disable all firewall rules
-- Allow root login via SSH
-- Expose default ports without reason
-- Neglect regular security audits
-
-Remember:
-- Focus on **maintainability** and **simplicity** (KISS).
-- Keep code **organized** and **modular** (SOLID, KISS, DRY, YAGNI, structured packages).
-- Handle errors and logs **properly**, ensuring no sensitive data is leaked.
-- **Document** thoroughly (docstrings, architecture).
-- Strive for **secure**, **reproducible** builds and **clean** deployments.
+12. Prompt Engineering & AI Collaboration (Modular prompts, minimal few‑shot, token‑cost metrics)
+ALWAYS
+* Keep prompts short, declarative, and context‑rich; use {{variable}} syntax.
+* Track token usage per endpoint; alert when cost exceeds baseline.
+* Version prompts alongside code; write tests with synthetic inputs.
+NEVER
+* Rely solely on one‑shot prompts for critical paths.
+* Combine multiple concerns in one giant prompt.

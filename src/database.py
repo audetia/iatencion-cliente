@@ -946,6 +946,50 @@ class DatabaseManager:
             logger.error(f"❌ Error obteniendo información para cuenta ID {account_id}: {e}")
             raise RuntimeError(f"Error en la base de datos: {str(e)}")
 
+    def get_all_active_email_accounts(self) -> dict:
+        """
+        Obtiene todas las cuentas de email activas del sistema.
+        
+        Returns:
+            dict: Lista de cuentas activas con información básica
+            
+        Raises:
+            RuntimeError: Si hay error en la base de datos
+        """
+        try:
+            with self.get_db_session() as db:
+                from .models.email_account import EmailAccount
+                
+                # Obtener todas las cuentas activas
+                active_accounts = EmailAccount.get_all_active(db)
+                
+                # Convertir a formato de diccionario para evitar dependencias de modelo
+                accounts_data = []
+                for account in active_accounts:
+                    account_info = {
+                        'account_id': account.id,
+                        'user_id': account.user_id,
+                        'email': account.email,
+                        'imap_server': account.imap_server,
+                        'imap_port': account.imap_port,
+                        'smtp_server': account.smtp_server,
+                        'smtp_port': account.smtp_port,
+                        'is_active': account.is_active
+                    }
+                    accounts_data.append(account_info)
+                
+                logger.info(f"✅ Obtenidas {len(accounts_data)} cuentas activas del sistema")
+                return {
+                    'success': True,
+                    'accounts': accounts_data,
+                    'total_count': len(accounts_data),
+                    'message': f'Encontradas {len(accounts_data)} cuentas activas'
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo todas las cuentas activas: {e}")
+            raise RuntimeError(f"Error en la base de datos: {str(e)}")
+
     def get_email_account_credentials(self, account_id: int) -> dict:
         """
         Obtiene las credenciales desencriptadas de una cuenta de email.

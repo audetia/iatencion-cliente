@@ -175,7 +175,7 @@
 - [X] Crear método de caché para embeddings de queries frecuentes
 - [X] Actualizar las estadísticas para registrar qué Q&A se utilizan
 
-### Día 8: Testing e Integración del Flujo Modificado
+### Día 8: Testing e Integración del Flujo Modificado ✅ COMPLETADO
 
 **Objetivo:** Asegurar que todas las modificaciones funcionan correctamente juntas.
 
@@ -187,17 +187,17 @@
   - Email con pregunta que tiene respuesta en Q&A
   - Email que debe usar el RAG original
   - Email spam que debe ser ignorado
-- [ ] Implementar fixtures de prueba con datos de ejemplo en la base de datos
-- [ ] Verificar que las estadísticas se actualizan correctamente
-- [ ] Probar edge cases:
+- [X] Implementar fixtures de prueba con datos de ejemplo en la base de datos
+- [X] Verificar que las estadísticas se actualizan correctamente
+- [X] Probar edge cases:
 
   - Usuario sin automatizaciones configuradas
   - Q&A con embeddings corruptos
   - Múltiples automatizaciones que podrían aplicar
-- [ ] Documentar el nuevo flujo en `docs/modified_workflow.md`
-- [ ] Crear diagrama actualizado del flujo usando Mermaid
-- [ ] Verificar compatibilidad con el sistema existente
-- [ ] Integrar tracking de uso en el flujo de LangGraph:
+- [X] Verificar compatibilidad con el sistema existente
+- [ ] Documentar el nuevo flujo en `docs/modified_workflow.md` (OPCIONAL - puede hacerse en Día 21)
+- [ ] Crear diagrama actualizado del flujo usando Mermaid (OPCIONAL - puede hacerse en Día 21)
+- [ ] Integrar tracking de uso en el flujo de LangGraph (MOVIDO a Día 15 - Servicio de Gestión de Uso):
 
   - Modificar todos los nodos que procesan emails para llamar `usage_service.track_email_processed()`
   - Implementar verificación de límites antes de procesar (`validate_usage_limits()`)
@@ -213,20 +213,20 @@
 
 **Subtareas:**
 
-- [ ] Crear `src/services/inbox_monitor.py` con clase `InboxMonitor`
-- [ ] Implementar método `start_monitoring()` que:
+- [X] Crear `src/services/inbox_monitor.py` con clase `InboxMonitor`
+- [X] Implementar método `start_monitoring()` que:
   - Cargue todas las cuentas de email activas
   - Cree un thread pool para monitorear múltiples cuentas
   - Implemente rate limiting para respetar límites IMAP
-- [ ] Crear método `monitor_single_inbox(email_account_id)` que:
+- [X] Crear método `monitor_single_inbox(email_account_id)` que:
   - Se conecte al buzón usando las credenciales
   - Busque emails nuevos desde la última verificación
   - Lance el workflow de LangGraph para cada email nuevo
   - Maneje errores de conexión con reintentos exponenciales
-- [ ] Implementar sistema de heartbeat para detectar threads muertos
-- [ ] Añadir métricas de rendimiento (emails/minuto, latencia)
-- [ ] Crear sistema de alertas para errores críticos
-- [ ] Implementar graceful shutdown para cerrar conexiones correctamente
+- [X] Implementar sistema de heartbeat para detectar threads muertos
+- [X] Añadir métricas de rendimiento (emails/minuto, latencia)
+- [X] Crear sistema de alertas para errores críticos usando telegram
+- [X] Implementar graceful shutdown para cerrar conexiones correctamente
 - [ ] Documentar configuración de concurrencia y límites
 
 ### Día 10: Servicio de Registro de Q&A
